@@ -1,0 +1,20 @@
+{
+  "name": "paiban-saas",
+  "version": "2.0.0",
+  "description": "SaaS-ready shift scheduling app",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": ["schedule", "shift", "saas"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "better-sqlite3": "^9.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "hono": "^4.4.8"
+  }
+}
