@@ -8,7 +8,7 @@ pages_build_output_dir = "public"
 [[d1_databases]]
 binding = "DB"
 database_name = "paiban-db"
-database_id = "your-d1-database-id-here"
+database_id = "e18546d4-7943-4898-81e9-eec8e907bbe5"
 
 [vars]
 MAIN_DOMAIN = "paiban"
