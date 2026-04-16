@@ -1,7 +1,3 @@
-import { Hono } from 'hono'
-
-const app = new Hono({ strict: false })
-
 const DEFAULT_CONFIG = {
   groups: [
     { id: 'g1', name: '产品-数科' },
@@ -39,121 +35,125 @@ const DEFAULT_CONFIG = {
   ],
 }
 
-// ── Tenant Resolution Middleware ──
-app.use('*', async (c, next) => {
-  const host = c.req.header('host') || ''
+function json(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  })
+}
+
+function getTenantId(request, env) {
+  const host = request.headers.get('host') || ''
   const parts = host.split('.')
-  const mainDomain = c.env.MAIN_DOMAIN || ''
+  const mainDomain = env.MAIN_DOMAIN || ''
   let tenantId = parts[0]
 
-  // Fallback for localhost, direct IP, or short hostnames
   if (host.includes('localhost') || host.includes('127.0.0.1') || parts.length < 3) {
-    tenantId = c.req.header('x-tenant-id') || 'default'
+    tenantId = request.headers.get('x-tenant-id') || 'default'
   } else if (tenantId === 'www') {
     tenantId = parts[1] === mainDomain ? 'default' : parts[1]
   }
+  return tenantId
+}
 
-  c.set('tenantId', tenantId)
-
-  // Auto-provision tenant if not exists
-  const db = c.env.DB
-  if (!db) {
-    return c.json({ error: 'Database not bound' }, 500)
-  }
-
+async function ensureTenant(db, tenantId) {
   const existing = await db.prepare('SELECT id FROM tenants WHERE id = ?').bind(tenantId).first()
   if (!existing) {
     await db.prepare('INSERT INTO tenants (id, name) VALUES (?, ?)').bind(tenantId, tenantId).run()
     await db.prepare('INSERT INTO tenant_configs (tenant_id, value) VALUES (?, ?)')
       .bind(tenantId, JSON.stringify(DEFAULT_CONFIG)).run()
   }
+}
 
-  await next()
-})
+export async function onRequest(context) {
+  const { request, env } = context
+  const url = new URL(request.url)
+  const pathname = url.pathname
+  const method = request.method
+  const db = env.DB
+  const tenantId = getTenantId(request, env)
 
-// ── Health ──
-app.get('/api/health', (c) => {
-  return c.json({ ok: true, tenantId: c.get('tenantId'), time: new Date().toISOString() })
-})
-
-// ── Config ──
-app.get('/api/config', async (c) => {
-  const db = c.env.DB
-  const tenantId = c.get('tenantId')
-  const row = await db.prepare('SELECT value FROM tenant_configs WHERE tenant_id = ?').bind(tenantId).first()
-  if (!row) {
-    await db.prepare('INSERT INTO tenant_configs (tenant_id, value) VALUES (?, ?)')
-      .bind(tenantId, JSON.stringify(DEFAULT_CONFIG)).run()
-    return c.json(DEFAULT_CONFIG)
+  if (!db) {
+    return json({ error: 'Database not bound' }, 500)
   }
-  return c.json(JSON.parse(row.value))
-})
 
-app.post('/api/config', async (c) => {
-  const db = c.env.DB
-  const tenantId = c.get('tenantId')
-  try {
-    const body = await c.req.json()
-    await db.prepare('INSERT OR REPLACE INTO tenant_configs (tenant_id, value) VALUES (?, ?)')
-      .bind(tenantId, JSON.stringify(body)).run()
-    return c.json({ ok: true })
-  } catch (e) {
-    return c.json({ error: e.message }, 400)
+  await ensureTenant(db, tenantId)
+
+  // Health
+  if (pathname === '/api/health' && method === 'GET') {
+    return json({ ok: true, tenantId, time: new Date().toISOString() })
   }
-})
 
-// ── Schedule ──
-app.get('/api/schedule/:year/:month', async (c) => {
-  const db = c.env.DB
-  const tenantId = c.get('tenantId')
-  const { year, month } = c.req.param()
-  const { results } = await db.prepare(
-    'SELECT member_id, day, status_id FROM schedules WHERE tenant_id = ? AND year = ? AND month = ?'
-  ).bind(tenantId, year, month).all()
-
-  const data = {}
-  for (const r of results) {
-    data[`${r.member_id}-${year}-${month}-${r.day}`] = r.status_id
+  // Config
+  if (pathname === '/api/config' && method === 'GET') {
+    const row = await db.prepare('SELECT value FROM tenant_configs WHERE tenant_id = ?').bind(tenantId).first()
+    if (!row) {
+      await db.prepare('INSERT INTO tenant_configs (tenant_id, value) VALUES (?, ?)')
+        .bind(tenantId, JSON.stringify(DEFAULT_CONFIG)).run()
+      return json(DEFAULT_CONFIG)
+    }
+    return json(JSON.parse(row.value))
   }
-  return c.json(data)
-})
 
-app.post('/api/schedule/:year/:month', async (c) => {
-  const db = c.env.DB
-  const tenantId = c.get('tenantId')
-  const { year, month } = c.req.param()
-  try {
-    const body = await c.req.json()
-    const stmts = []
+  if (pathname === '/api/config' && method === 'POST') {
+    try {
+      const body = await request.json()
+      await db.prepare('INSERT OR REPLACE INTO tenant_configs (tenant_id, value) VALUES (?, ?)')
+        .bind(tenantId, JSON.stringify(body)).run()
+      return json({ ok: true })
+    } catch (e) {
+      return json({ error: e.message }, 400)
+    }
+  }
 
-    for (const [key, statusId] of Object.entries(body)) {
-      const [memberId, y, m, d] = key.split('-')
-      if (+y !== +year || +m !== +month) continue
-      if (!statusId) {
-        stmts.push(
-          db.prepare('DELETE FROM schedules WHERE tenant_id = ? AND year = ? AND month = ? AND member_id = ? AND day = ?')
-            .bind(tenantId, year, month, memberId, +d)
-        )
-      } else {
-        stmts.push(
-          db.prepare('INSERT OR REPLACE INTO schedules (tenant_id, member_id, year, month, day, status_id) VALUES (?, ?, ?, ?, ?, ?)')
-            .bind(tenantId, memberId, year, month, +d, statusId)
-        )
+  // Schedule
+  const scheduleMatch = pathname.match(/^\/api\/schedule\/([0-9]{4})\/([0-9]{1,2})$/)
+  if (scheduleMatch && method === 'GET') {
+    const year = scheduleMatch[1]
+    const month = scheduleMatch[2]
+    const { results } = await db.prepare(
+      'SELECT member_id, day, status_id FROM schedules WHERE tenant_id = ? AND year = ? AND month = ?'
+    ).bind(tenantId, year, month).all()
+
+    const data = {}
+    for (const r of results) {
+      data[`${r.member_id}-${year}-${month}-${r.day}`] = r.status_id
+    }
+    return json(data)
+  }
+
+  if (scheduleMatch && method === 'POST') {
+    const year = +scheduleMatch[1]
+    const month = +scheduleMatch[2]
+    try {
+      const body = await request.json()
+      const stmts = []
+
+      for (const [key, statusId] of Object.entries(body)) {
+        const [memberId, y, m, d] = key.split('-')
+        if (+y !== year || +m !== month) continue
+        if (!statusId) {
+          stmts.push(
+            db.prepare('DELETE FROM schedules WHERE tenant_id = ? AND year = ? AND month = ? AND member_id = ? AND day = ?')
+              .bind(tenantId, year, month, memberId, +d)
+          )
+        } else {
+          stmts.push(
+            db.prepare('INSERT OR REPLACE INTO schedules (tenant_id, member_id, year, month, day, status_id) VALUES (?, ?, ?, ?, ?, ?)')
+              .bind(tenantId, memberId, year, month, +d, statusId)
+          )
+        }
       }
-    }
 
-    // D1 batch limit is 100 statements per batch
-    for (let i = 0; i < stmts.length; i += 100) {
-      await db.batch(stmts.slice(i, i + 100))
-    }
+      for (let i = 0; i < stmts.length; i += 100) {
+        await db.batch(stmts.slice(i, i + 100))
+      }
 
-    return c.json({ ok: true })
-  } catch (e) {
-    return c.json({ error: e.message }, 400)
+      return json({ ok: true })
+    } catch (e) {
+      return json({ error: e.message }, 400)
+    }
   }
-})
 
-// Catch-all for SPA (not needed for API routes, but good for direct /api/* hits)
-app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404))
-
-export const onRequest = app.fetch
+  return json({ error: 'Not found' }, 404)
+}
