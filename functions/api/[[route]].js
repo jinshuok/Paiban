@@ -8,25 +8,25 @@ const DEFAULT_CONFIG = {
     { id: 'g4', name: '人事部' },
   ],
   members: [
-    { id: 'm1',  name: '张三', uid: 'zhangsan', groupId: 'g1' },
-    { id: 'm2',  name: '李四', uid: 'lisi', groupId: 'g1' },
-    { id: 'm3',  name: '王五', uid: 'wangwu', groupId: 'g1' },
-    { id: 'm4',  name: '赵六', uid: 'zhaoliu', groupId: 'g2' },
-    { id: 'm5',  name: '孙七', uid: 'sunqi', groupId: 'g2' },
-    { id: 'm6',  name: '周八', uid: 'zhouba', groupId: 'g3' },
-    { id: 'm7',  name: '吴九', uid: 'wujiu', groupId: 'g3' },
-    { id: 'm8',  name: '郑十', uid: 'zhengshi', groupId: 'g4' },
-    { id: 'm9',  name: '钱十一', uid: 'qianshiyi', groupId: 'g4' },
-    { id: 'm10', name: '冯十二', uid: 'fengshier', groupId: 'g4' },
+    { id: 'm1',  name: '张三', uid: 'zhangsan', groupId: 'g1', thirdParties: [] },
+    { id: 'm2',  name: '李四', uid: 'lisi', groupId: 'g1', thirdParties: [] },
+    { id: 'm3',  name: '王五', uid: 'wangwu', groupId: 'g1', thirdParties: [] },
+    { id: 'm4',  name: '赵六', uid: 'zhaoliu', groupId: 'g2', thirdParties: [] },
+    { id: 'm5',  name: '孙七', uid: 'sunqi', groupId: 'g2', thirdParties: [] },
+    { id: 'm6',  name: '周八', uid: 'zhouba', groupId: 'g3', thirdParties: [] },
+    { id: 'm7',  name: '吴九', uid: 'wujiu', groupId: 'g3', thirdParties: [] },
+    { id: 'm8',  name: '郑十', uid: 'zhengshi', groupId: 'g4', thirdParties: [] },
+    { id: 'm9',  name: '钱十一', uid: 'qianshiyi', groupId: 'g4', thirdParties: [] },
+    { id: 'm10', name: '冯十二', uid: 'fengshier', groupId: 'g4', thirdParties: [] },
   ],
   statuses: [
-    { id: 'work',   label: '正常班', short: '班', color: '#2563eb', timeStart: '09:00', timeEnd: '18:00', inCycle: true  },
-    { id: 'duty',   label: '值班',   short: '值', color: '#7c3aed', timeStart: '13:30', timeEnd: '22:00', inCycle: true  },
-    { id: 'rest',   label: '休息',   short: '休', color: '#f59e0b', timeStart: '',      timeEnd: '',      inCycle: true  },
-    { id: 'annual', label: '年假',   short: '年', color: '#f97316', timeStart: '',      timeEnd: '',      inCycle: false },
-    { id: 'leave',  label: '事假',   short: '事', color: '#ef4444', timeStart: '',      timeEnd: '',      inCycle: false },
-    { id: 'sick',   label: '病假',   short: '病', color: '#ec4899', timeStart: '',      timeEnd: '',      inCycle: false },
-    { id: 'comp',   label: '调休',   short: '调', color: '#64748b', timeStart: '',      timeEnd: '',      inCycle: false },
+    { id: 'work',   label: '正常班', short: '班', color: '#2563eb', timeStart: '09:00', timeEnd: '18:00', inCycle: true, dayCount: 1  },
+    { id: 'duty',   label: '值班',   short: '值', color: '#7c3aed', timeStart: '13:30', timeEnd: '22:00', inCycle: true, dayCount: 1  },
+    { id: 'rest',   label: '休息',   short: '休', color: '#f59e0b', timeStart: '',      timeEnd: '',      inCycle: true, dayCount: 0  },
+    { id: 'annual', label: '年假',   short: '年', color: '#f97316', timeStart: '',      timeEnd: '',      inCycle: false, dayCount: 0 },
+    { id: 'leave',  label: '事假',   short: '事', color: '#ef4444', timeStart: '',      timeEnd: '',      inCycle: false, dayCount: 0 },
+    { id: 'sick',   label: '病假',   short: '病', color: '#ec4899', timeStart: '',      timeEnd: '',      inCycle: false, dayCount: 0 },
+    { id: 'comp',   label: '调休',   short: '调', color: '#64748b', timeStart: '',      timeEnd: '',      inCycle: false, dayCount: 0 },
   ],
   clickCycle: ['work', 'duty', 'rest', null],
   stats: [
@@ -373,7 +373,7 @@ export async function onRequest(context) {
       const exists = cfg.members.find(m => m.uid === phone)
       if (!exists) {
         const gid = cfg.groups[0]?.id || ''
-        cfg.members.push({ id: genId('m'), name: phone, uid: phone, groupId: gid })
+        cfg.members.push({ id: genId('m'), name: phone, uid: phone, groupId: gid, thirdParties: [] })
       }
       await db.prepare('INSERT OR REPLACE INTO tenant_configs (tenant_id, value) VALUES (?, ?)')
         .bind(groupId, JSON.stringify(cfg)).run()
@@ -414,6 +414,38 @@ export async function onRequest(context) {
       .bind(groupId, user.role, session.token).run()
 
     return json({ ok: true, tenantId: groupId, role: user.role })
+  }
+
+  if (pathname === '/api/auth/profile' && method === 'POST') {
+    if (!session || session.role === 'superadmin') return json({ error: 'Unauthorized' }, 401)
+    const body = await request.json().catch(() => ({}))
+    const { name, uid, thirdParties } = body
+    if (!name || !uid) return json({ error: '姓名和手机号必填' }, 400)
+
+    const currentUid = session.username
+    const tenantId = session.tenant_id
+
+    if (uid !== currentUid) {
+      const existing = await db.prepare('SELECT 1 FROM users WHERE tenant_id = ? AND username = ?').bind(tenantId, uid).first()
+      if (existing) return json({ error: '该手机号已被使用' }, 409)
+      await db.prepare('UPDATE users SET username = ? WHERE tenant_id = ? AND username = ?')
+        .bind(uid, tenantId, currentUid).run()
+      await db.prepare('UPDATE sessions SET username = ? WHERE tenant_id = ? AND username = ?')
+        .bind(uid, tenantId, currentUid).run()
+    }
+
+    const cfgRow = await db.prepare('SELECT value FROM tenant_configs WHERE tenant_id = ?').bind(tenantId).first()
+    const cfg = cfgRow ? JSON.parse(cfgRow.value) : JSON.parse(JSON.stringify(DEFAULT_CONFIG))
+    sanitizeConfig(cfg)
+    const member = cfg.members.find(m => m.uid === currentUid)
+    if (!member) return json({ error: '成员不存在' }, 404)
+    member.name = name
+    member.uid = uid
+    member.thirdParties = Array.isArray(thirdParties) ? thirdParties : []
+    await db.prepare('INSERT OR REPLACE INTO tenant_configs (tenant_id, value) VALUES (?, ?)')
+      .bind(tenantId, JSON.stringify(cfg)).run()
+
+    return json({ ok: true, username: uid, memberId: member.id })
   }
 
   if (pathname === '/api/superadmin/login' && method === 'POST') {

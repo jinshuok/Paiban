@@ -274,7 +274,7 @@
       <span class="font-semibold text-slate-800 text-base flex-1 min-w-[80px]">设置</span>
       <div class="flex gap-1 bg-slate-100 p-1 rounded-lg">
         <button class="modal-tab active px-3 py-1 rounded-md text-xs font-medium transition" data-tab="members">成员管理</button>
-        <button class="modal-tab px-3 py-1 rounded-md text-xs font-medium text-slate-500 hover:text-slate-700 transition" data-tab="statuses">状态管理</button>
+        <button class="modal-tab px-3 py-1 rounded-md text-xs font-medium text-slate-500 hover:text-slate-700 transition" data-tab="statuses">排班状态</button>
         <button class="modal-tab px-3 py-1 rounded-md text-xs font-medium text-slate-500 hover:text-slate-700 transition" data-tab="devdoc">开发文档</button>
       </div>
       <button id="modalClose" class="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center text-sm transition">✕</button>
@@ -297,6 +297,39 @@
 </div>
 
 
+
+<!-- Edit Profile Drawer -->
+<div id="editProfileModal" class="hidden fixed inset-0 z-[400]">
+  <div class="absolute inset-0 bg-black/40" id="editProfileOverlay"></div>
+  <div class="absolute right-0 top-0 bottom-0 w-[480px] max-w-[90vw] bg-white shadow-2xl flex flex-col transform translate-x-full transition-transform duration-300" id="editProfileDrawer">
+    <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+      <span class="font-semibold text-slate-800 text-base">编辑信息</span>
+      <button id="editProfileClose" class="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center text-sm transition">✕</button>
+    </div>
+    <div class="flex-1 overflow-y-auto p-5 space-y-4">
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">姓名</label>
+        <input id="editProfileName" type="text" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 text-sm" placeholder="请输入姓名">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">手机号</label>
+        <input id="editProfilePhone" type="tel" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 text-sm font-mono" placeholder="请输入手机号">
+      </div>
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <label class="text-xs font-medium text-slate-600">第三方账号</label>
+          <button id="editProfileAddThirdParty" class="text-xs px-2 py-1 rounded-md border border-dashed border-indigo-300 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition">+ 添加</button>
+        </div>
+        <div id="editProfileThirdParties" class="space-y-2"></div>
+        <div class="text-[11px] text-slate-400 mt-1">例如：组织ID meituan，账号ID zhangsanfeng</div>
+      </div>
+    </div>
+    <div class="px-5 py-3 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-2">
+      <button id="editProfileCancel" class="h-9 px-4 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-medium text-slate-600 transition">取消</button>
+      <button id="editProfileSave" class="h-9 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">保存</button>
+    </div>
+  </div>
+</div>
 
 <!-- Reset Password Modal -->
 <div id="resetPwdWrap" class="hidden fixed inset-0 bg-black/30 z-[500] flex items-center justify-center">

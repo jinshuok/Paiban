@@ -9,25 +9,25 @@ const DEFAULT_CONFIG = {
     { id: 'g4', name: '人事部' },
   ],
   members: [
-    { id: 'm1',  name: '张三', uid: 'zhangsan', groupId: 'g1' },
-    { id: 'm2',  name: '李四', uid: 'lisi', groupId: 'g1' },
-    { id: 'm3',  name: '王五', uid: 'wangwu', groupId: 'g1' },
-    { id: 'm4',  name: '赵六', uid: 'zhaoliu', groupId: 'g2' },
-    { id: 'm5',  name: '孙七', uid: 'sunqi', groupId: 'g2' },
-    { id: 'm6',  name: '周八', uid: 'zhouba', groupId: 'g3' },
-    { id: 'm7',  name: '吴九', uid: 'wujiu', groupId: 'g3' },
-    { id: 'm8',  name: '郑十', uid: 'zhengshi', groupId: 'g4' },
-    { id: 'm9',  name: '钱十一', uid: 'qianshiyi', groupId: 'g4' },
-    { id: 'm10', name: '冯十二', uid: 'fengshier', groupId: 'g4' },
+    { id: 'm1',  name: '张三', uid: 'zhangsan', groupId: 'g1', thirdParties: [] },
+    { id: 'm2',  name: '李四', uid: 'lisi', groupId: 'g1', thirdParties: [] },
+    { id: 'm3',  name: '王五', uid: 'wangwu', groupId: 'g1', thirdParties: [] },
+    { id: 'm4',  name: '赵六', uid: 'zhaoliu', groupId: 'g2', thirdParties: [] },
+    { id: 'm5',  name: '孙七', uid: 'sunqi', groupId: 'g2', thirdParties: [] },
+    { id: 'm6',  name: '周八', uid: 'zhouba', groupId: 'g3', thirdParties: [] },
+    { id: 'm7',  name: '吴九', uid: 'wujiu', groupId: 'g3', thirdParties: [] },
+    { id: 'm8',  name: '郑十', uid: 'zhengshi', groupId: 'g4', thirdParties: [] },
+    { id: 'm9',  name: '钱十一', uid: 'qianshiyi', groupId: 'g4', thirdParties: [] },
+    { id: 'm10', name: '冯十二', uid: 'fengshier', groupId: 'g4', thirdParties: [] },
   ],
   statuses: [
-    { id: 'work',   label: '正常班', short: '班', color: '#2563eb', timeStart: '09:00', timeEnd: '18:00', inCycle: true  },
-    { id: 'duty',   label: '值班',   short: '值', color: '#7c3aed', timeStart: '13:30', timeEnd: '22:00', inCycle: true  },
-    { id: 'rest',   label: '休息',   short: '休', color: '#f59e0b', timeStart: '',      timeEnd: '',      inCycle: true  },
-    { id: 'annual', label: '年假',   short: '年', color: '#f97316', timeStart: '',      timeEnd: '',      inCycle: false },
-    { id: 'leave',  label: '事假',   short: '事', color: '#ef4444', timeStart: '',      timeEnd: '',      inCycle: false },
-    { id: 'sick',   label: '病假',   short: '病', color: '#ec4899', timeStart: '',      timeEnd: '',      inCycle: false },
-    { id: 'comp',   label: '调休',   short: '调', color: '#64748b', timeStart: '',      timeEnd: '',      inCycle: false },
+    { id: 'work',   label: '正常班', short: '班', color: '#2563eb', timeStart: '09:00', timeEnd: '18:00', inCycle: true, dayCount: 1  },
+    { id: 'duty',   label: '值班',   short: '值', color: '#7c3aed', timeStart: '13:30', timeEnd: '22:00', inCycle: true, dayCount: 1  },
+    { id: 'rest',   label: '休息',   short: '休', color: '#f59e0b', timeStart: '',      timeEnd: '',      inCycle: true, dayCount: 0  },
+    { id: 'annual', label: '年假',   short: '年', color: '#f97316', timeStart: '',      timeEnd: '',      inCycle: false, dayCount: 0 },
+    { id: 'leave',  label: '事假',   short: '事', color: '#ef4444', timeStart: '',      timeEnd: '',      inCycle: false, dayCount: 0 },
+    { id: 'sick',   label: '病假',   short: '病', color: '#ec4899', timeStart: '',      timeEnd: '',      inCycle: false, dayCount: 0 },
+    { id: 'comp',   label: '调休',   short: '调', color: '#64748b', timeStart: '',      timeEnd: '',      inCycle: false, dayCount: 0 },
   ],
   clickCycle: ['work', 'duty', 'rest', null],
   stats: [
@@ -1712,6 +1712,7 @@ function renderStatusesTab() {
           <th class="text-left py-2 px-2" style="width:80px">上班开始</th>
           <th class="text-left py-2 px-2" style="width:80px">上班结束</th>
           <th class="text-left py-2 px-2" style="width:50px">颜色</th>
+          <th class="text-center py-2 px-2" style="width:60px">计天数</th>
           <th class="text-center py-2 px-2" style="width:70px">快捷切换</th>
           <th class="py-2 px-2" style="width:40px"></th>
         </tr>
@@ -1724,10 +1725,11 @@ function renderStatusesTab() {
             <td class="py-1.5 px-2"><input class="s-ts w-full text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500 font-mono" value="${s.timeStart||''}" placeholder="09:00"></td>
             <td class="py-1.5 px-2"><input class="s-te w-full text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500 font-mono" value="${s.timeEnd||''}" placeholder="18:00"></td>
             <td class="py-1.5 px-2">
-              <label class="w-7 h-7 rounded-md block overflow-hidden cursor-pointer" style="background:${s.color}">
+              <label class="w-7 h-7 rounded-md block overflow-hidden cursor-pointer border-0" style="background:${s.color};border:none">
                 <input type="color" class="s-color w-[200%] h-[200%] -m-1/4 border-0 p-0 cursor-pointer" value="${s.color}">
               </label>
             </td>
+            <td class="py-1.5 px-2"><input class="s-daycount w-full text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500 text-center font-mono" type="number" step="0.1" value="${s.dayCount !== undefined ? s.dayCount : (s.timeStart ? 1 : 0)}" placeholder="1"></td>
             <td class="py-1.5 px-2 text-center"><input type="checkbox" class="s-cycle w-4 h-4 accent-indigo-600 cursor-pointer" ${s.inCycle?'checked':''} title="勾选后加入点击循环"></td>
             <td class="py-1.5 px-2 text-center">
               <button class="del-status w-7 h-7 rounded-md border border-slate-200 hover:bg-red-50 hover:text-red-500 hover:border-red-200 text-slate-400 flex items-center justify-center transition" title="删除">
@@ -1753,11 +1755,13 @@ function bindStatusesTab() {
       editStatuses[i].timeStart = tr.querySelector('.s-ts').value.trim();
       editStatuses[i].timeEnd = tr.querySelector('.s-te').value.trim();
       editStatuses[i].color = tr.querySelector('.s-color').value;
+      const dayCountVal = parseFloat(tr.querySelector('.s-daycount').value);
+      editStatuses[i].dayCount = isNaN(dayCountVal) ? 0 : Math.round(dayCountVal * 10) / 10;
       editStatuses[i].inCycle = tr.querySelector('.s-cycle').checked;
       editStatuses[i].countAs = editStatuses[i].timeStart ? 'work' : 'leave';
     });
   }
-  document.querySelectorAll('#statusesTable .s-label, #statusesTable .s-short, #statusesTable .s-ts, #statusesTable .s-te').forEach(el => {
+  document.querySelectorAll('#statusesTable .s-label, #statusesTable .s-short, #statusesTable .s-ts, #statusesTable .s-te, #statusesTable .s-daycount').forEach(el => {
     el.addEventListener('input', syncStatuses);
   });
   document.querySelectorAll('#statusesTable .s-cycle').forEach(el => el.addEventListener('change', syncStatuses));
@@ -1769,7 +1773,7 @@ function bindStatusesTab() {
   });
   document.getElementById('addStatusBtn').addEventListener('click', () => {
     syncStatuses();
-    editStatuses.push({ id: genId('s'), label: '新状态', short: '新', color: '#6366f1', timeStart: '', timeEnd: '', inCycle: false, countAs: 'leave' });
+    editStatuses.push({ id: genId('s'), label: '新状态', short: '新', color: '#6366f1', timeStart: '', timeEnd: '', inCycle: false, countAs: 'leave', dayCount: 0 });
     renderModalTab();
   });
 }
@@ -2198,9 +2202,8 @@ document.getElementById('userProfileSettings')?.addEventListener('click', () => 
   document.getElementById('userProfileMenu').classList.add('hidden');
 });
 document.getElementById('userProfileEdit')?.addEventListener('click', () => {
-  // TODO: Show edit info modal
-  alert('编辑信息功能待实现');
   document.getElementById('userProfileMenu').classList.add('hidden');
+  openEditProfileDrawer();
 });
 document.getElementById('userLogoutBtn')?.addEventListener('click', async () => {
   try {
@@ -2209,6 +2212,104 @@ document.getElementById('userLogoutBtn')?.addEventListener('click', async () => 
   resetAuthState();
   showAuthScreen();
   document.getElementById('userProfileMenu').classList.add('hidden');
+});
+
+// ═══════════════════════════════════════════════
+//  EDIT PROFILE DRAWER
+// ═══════════════════════════════════════════════
+function openEditProfileDrawer() {
+  const member = CONFIG.members.find(m => m.uid === currentUsername);
+  if (!member) {
+    showToast('未找到当前成员信息');
+    return;
+  }
+  document.getElementById('editProfileName').value = member.name || '';
+  document.getElementById('editProfilePhone').value = member.uid || '';
+  renderEditProfileThirdParties(member.thirdParties || []);
+  document.getElementById('editProfileModal').classList.remove('hidden');
+  document.getElementById('editProfileDrawer').classList.remove('translate-x-full');
+}
+
+function closeEditProfileDrawer() {
+  document.getElementById('editProfileModal').classList.add('hidden');
+  document.getElementById('editProfileDrawer').classList.add('translate-x-full');
+}
+
+function renderEditProfileThirdParties(list) {
+  const container = document.getElementById('editProfileThirdParties');
+  container.innerHTML = list.map((tp, i) => `
+    <div class="flex items-center gap-2 third-party-row" data-idx="${i}">
+      <input type="text" class="tp-orgId flex-1 text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500" placeholder="组织ID" value="${tp.orgId || ''}">
+      <input type="text" class="tp-accountId flex-1 text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500" placeholder="账号ID" value="${tp.accountId || ''}">
+      <button class="del-third-party w-7 h-7 rounded-md border border-slate-200 hover:bg-red-50 hover:text-red-500 text-slate-400 flex items-center justify-center text-xs transition">✕</button>
+    </div>
+  `).join('');
+  container.querySelectorAll('.del-third-party').forEach(btn => {
+    btn.addEventListener('click', () => btn.closest('.third-party-row').remove());
+  });
+}
+
+function getEditProfileThirdParties() {
+  const arr = [];
+  document.querySelectorAll('#editProfileThirdParties .third-party-row').forEach(row => {
+    const orgId = row.querySelector('.tp-orgId').value.trim();
+    const accountId = row.querySelector('.tp-accountId').value.trim();
+    if (orgId && accountId) arr.push({ orgId, accountId });
+  });
+  return arr;
+}
+
+async function saveEditProfile() {
+  const name = document.getElementById('editProfileName').value.trim();
+  const phone = document.getElementById('editProfilePhone').value.trim();
+  const thirdParties = getEditProfileThirdParties();
+  if (!name || !phone) {
+    showToast('姓名和手机号不能为空');
+    return;
+  }
+  try {
+    const res = await fetch('/api/auth/profile', {
+      method: 'POST',
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ name, uid: phone, thirdParties })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      showToast(data.error || '保存失败');
+      return;
+    }
+    const data = await res.json();
+    currentUsername = data.username || phone;
+    const member = CONFIG.members.find(m => m.id === data.memberId) || CONFIG.members.find(m => m.uid === currentUsername);
+    if (member) {
+      member.name = name;
+      member.uid = phone;
+      member.thirdParties = thirdParties;
+    }
+    try { localStorage.setItem('sched_config_v2', JSON.stringify(CONFIG)); } catch(e){}
+    showToast('保存成功');
+    closeEditProfileDrawer();
+    render();
+  } catch (e) {
+    showToast('网络错误');
+  }
+}
+
+document.getElementById('editProfileOverlay')?.addEventListener('click', closeEditProfileDrawer);
+document.getElementById('editProfileClose')?.addEventListener('click', closeEditProfileDrawer);
+document.getElementById('editProfileCancel')?.addEventListener('click', closeEditProfileDrawer);
+document.getElementById('editProfileSave')?.addEventListener('click', saveEditProfile);
+document.getElementById('editProfileAddThirdParty')?.addEventListener('click', () => {
+  const container = document.getElementById('editProfileThirdParties');
+  const row = document.createElement('div');
+  row.className = 'flex items-center gap-2 third-party-row';
+  row.innerHTML = `
+    <input type="text" class="tp-orgId flex-1 text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500" placeholder="组织ID">
+    <input type="text" class="tp-accountId flex-1 text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500" placeholder="账号ID">
+    <button class="del-third-party w-7 h-7 rounded-md border border-slate-200 hover:bg-red-50 hover:text-red-500 text-slate-400 flex items-center justify-center text-xs transition">✕</button>
+  `;
+  container.appendChild(row);
+  row.querySelector('.del-third-party').addEventListener('click', () => row.remove());
 });
 
 // DevDoc
