@@ -1,0 +1,25 @@
+Push: 7b92013
+Date: 2026-04-17
+
+Root Cause / Motivation:
+用户报告注册新组织、注册新成员、以及普通用户登录后均会自动跳回登录页，无法进入排班表。
+根本原因是租户识别逻辑在固定域名（非子域名）部署场景下失效：
+1. 前端 `apiHeaders()` 仅在 `localhost` 时发送 `X-Tenant-Id`，导致线上固定域名访问时后端无法获知当前用户所属组织。
+2. 后端 `getTenantId()` 同样仅在 `localhost` 时读取 `x-tenant-id` 头，固定域名下只能从 `Host` 解析，得到的主域名与 session 中记录的实际 `tenant_id` 不一致，触发 401 Unauthorized。
+3. 普通用户登录接口未返回 `tenantId`，前端登录成功后未将组织 ID 写入 `localStorage`，后续请求默认发送 `default` 租户，进一步导致 session 不匹配。
+
+Changes / Fix Details:
+- `functions/api/[[route]].js`:
+  - 修改 `getTenantId()`：优先从 `X-Tenant-Id` 请求头读取租户 ID，再 fallback 到子域名/localhost 解析逻辑。
+  - 修改 `/api/auth/login` 普通用户登录响应：补充返回 `tenantId: defaultGroupId`。
+- `public/app.js`:
+  - 修改 `apiHeaders()`：无论线上还是本地，只要 `getTenantId()` 有值就始终带上 `X-Tenant-Id` 请求头。
+  - 修改 `submitAuth()` 登录成功分支：使用 `data.tenantId || data.defaultGroupId` 正确写入 `localStorage.setItem('tenantId', ...)`。
+- `server.js`:
+  - 同步修改本地开发服务器的 `resolveTenant` 中间件，同样优先读取 `X-Tenant-Id`。
+  - 同步补充 `/api/auth/login` 返回 `tenantId`。
+
+Deployment Notes:
+- 代码已推送 GitHub (main -> origin/main)
+- Cloudflare Pages 将自动部署新版本
+- 无需额外的数据库迁移

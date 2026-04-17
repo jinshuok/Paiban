@@ -222,7 +222,7 @@ function hideAuthScreen() {
     if (superAdminMustChangePassword) showSuperAdminForcePwdModal();
     return;
   }
-  document.getElementById('logoutBtn')?.classList.remove('hidden');
+  // document.getElementById('logoutBtn')?.classList.remove('hidden'); // Removed
   if (currentUserRole === 'admin') {
     const btn = document.getElementById('devDocBtn');
     btn?.classList.remove('hidden');
@@ -230,10 +230,44 @@ function hideAuthScreen() {
   }
   document.getElementById('headerOrgName').textContent = currentTenantName || getTenantId();
   document.getElementById('headerSubTitle').classList.remove('hidden');
+  updateHeaderUI();
   loadMyGroups();
 }
 
-function updateAuthUI() {
+function updateHeaderUI() {
+  // Update org name dropdown
+  const orgWrap = document.getElementById('headerOrgWrap');
+  const orgIcon = document.getElementById('headerOrgIcon');
+  const orgMenu = document.getElementById('headerOrgMenu');
+  const orgOptions = document.getElementById('headerOrgOptions');
+  if (myGroups.length > 1) {
+    orgWrap.classList.add('cursor-pointer');
+    orgIcon.classList.remove('hidden');
+    orgWrap.onclick = () => {
+      const isHidden = orgMenu.classList.contains('hidden');
+      orgMenu.classList.toggle('hidden', !isHidden);
+      if (!isHidden) orgMenu.classList.add('hidden');
+      else {
+        orgOptions.innerHTML = '';
+        myGroups.forEach(g => {
+          const btn = document.createElement('button');
+          btn.className = 'w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition';
+          btn.textContent = g.name;
+          btn.onclick = () => selectGroup(g.id);
+          orgOptions.appendChild(btn);
+        });
+      }
+    };
+  } else {
+    orgWrap.classList.remove('cursor-pointer');
+    orgIcon.classList.add('hidden');
+    orgWrap.onclick = null;
+  }
+
+  // Update user profile label
+  const userLabel = document.getElementById('userProfileLabel');
+  userLabel.textContent = currentUsername || '我';
+}
   const memberForm = document.getElementById('memberAuthForm');
   const createForm = document.getElementById('createOrgForm');
   const saForm = document.getElementById('superAdminForm');
@@ -728,9 +762,8 @@ function renderTable() {
     const mIdx = CONFIG.members.indexOf(m);
     const group = CONFIG.groups.find(g => g.id === m.groupId);
     const row = document.createElement('div');
-    row.className = 'flex items-stretch border-b border-slate-200 hover:bg-slate-50/60';
-
-    const nc = document.createElement('div');
+    row.className = 'flex items-stretch border-b border-slate-200 hover:bg-slate-50/60' + (m.uid === currentUsername ? ' bg-blue-50' : '');
+    row.appendChild(row);
     nc.className = 'w-40 min-w-[160px] shrink-0 px-3 flex items-center gap-2 bg-white border-r border-slate-200 stickyleft hover:bg-slate-50/60';
     nc.innerHTML = `
       <div class="w-7 h-7 rounded-full text-white flex items-center justify-center text-xs font-semibold shrink-0" style="background:${memberColor(mIdx)}">${m.name[0]}</div>
@@ -2003,6 +2036,30 @@ document.getElementById('logoutBtn')?.addEventListener('click', async () => {
   } catch (e) {}
   resetAuthState();
   showAuthScreen();
+});
+
+// User Profile
+document.getElementById('userProfileBtn')?.addEventListener('click', () => {
+  const menu = document.getElementById('userProfileMenu');
+  menu.classList.toggle('hidden');
+});
+document.getElementById('userProfileSettings')?.addEventListener('click', () => {
+  // TODO: Show change password modal
+  alert('修改密码功能待实现');
+  document.getElementById('userProfileMenu').classList.add('hidden');
+});
+document.getElementById('userProfileEdit')?.addEventListener('click', () => {
+  // TODO: Show edit info modal
+  alert('编辑信息功能待实现');
+  document.getElementById('userProfileMenu').classList.add('hidden');
+});
+document.getElementById('userLogoutBtn')?.addEventListener('click', async () => {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST', headers: apiHeaders() });
+  } catch (e) {}
+  resetAuthState();
+  showAuthScreen();
+  document.getElementById('userProfileMenu').classList.add('hidden');
 });
 
 // DevDoc

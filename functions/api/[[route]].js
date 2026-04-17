@@ -609,5 +609,70 @@ export async function onRequest(context) {
     }
   }
 
+  if (pathname === '/api/schedule/member' && method === 'GET') {
+    const url = new URL(request.url)
+    const uid = url.searchParams.get('uid')
+    const phone = url.searchParams.get('phone')
+    const dateStr = url.searchParams.get('date')
+    if (!dateStr) return json({ error: 'date 参数必填' }, 400)
+    const [year, month, day] = dateStr.split('-').map(Number)
+    if (!year || !month || !day) return json({ error: 'date 格式错误，应为 YYYY-MM-DD' }, 400)
+
+    const cfgRow = await db.prepare('SELECT value FROM tenant_configs WHERE tenant_id = ?').bind(tenantId).first()
+    const cfg = cfgRow ? JSON.parse(cfgRow.value) : JSON.parse(JSON.stringify(DEFAULT_CONFIG))
+    sanitizeConfig(cfg)
+
+    let member = null
+    if (uid) {
+      member = cfg.members.find(m => m.uid === uid)
+    } else if (phone) {
+      member = cfg.members.find(m => m.uid === phone) // assuming uid is phone
+    }
+    if (!member) return json({ error: '成员不存在' }, 404)
+
+    const scheduleRow = await db.prepare(
+      'SELECT status_id FROM schedules WHERE tenant_id = ? AND member_id = ? AND year = ? AND month = ? AND day = ?'
+    ).bind(tenantId, member.id, year, month, day).first()
+
+    const status = scheduleRow ? cfg.statuses.find(s => s.id === scheduleRow.status_id) : null
+
+    return json({
+      member: { id: member.id, name: member.name, uid: member.uid, groupId: member.groupId },
+      status: status ? { id: status.id, label: status.label, short: status.short, color: status.color } : null,
+      date: dateStr
+    })
+  }
+
+  const dayScheduleMatch = pathname.match(/^\/api\/schedule\/day\/([0-9]{4}-[0-9]{1,2}-[0-9]{1,2})$/)
+  if (dayScheduleMatch && method === 'GET') {
+    const dateStr = dayScheduleMatch[1]
+    const [year, month, day] = dateStr.split('-').map(Number)
+
+    const cfgRow = await db.prepare('SELECT value FROM tenant_configs WHERE tenant_id = ?').bind(tenantId).first()
+    const cfg = cfgRow ? JSON.parse(cfgRow.value) : JSON.parse(JSON.stringify(DEFAULT_CONFIG))
+    sanitizeConfig(cfg)
+
+    const { results } = await db.prepare(
+      'SELECT member_id, status_id FROM schedules WHERE tenant_id = ? AND year = ? AND month = ? AND day = ?'
+    ).bind(tenantId, year, month, day).all()
+
+    const scheduleMap = {}
+    for (const r of results) {
+      scheduleMap[r.member_id] = r.status_id
+    }
+
+    const data = cfg.members.map(member => {
+      const statusId = scheduleMap[member.id]
+      const status = statusId ? cfg.statuses.find(s => s.id === statusId) : null
+      return {
+        member: { id: member.id, name: member.name, uid: member.uid, groupId: member.groupId },
+        status: status ? { id: status.id, label: status.label, short: status.short, color: status.color } : null,
+        date: dateStr
+      }
+    })
+
+    return json(data)
+  }
+
   return json({ error: 'Not found' }, 404)
 }
