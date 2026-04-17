@@ -81,13 +81,17 @@ function json(body, status = 200, extraHeaders = {}) {
 }
 
 function getTenantId(request, env) {
+  // 优先从请求头读取，支持固定域名部署和本地开发
+  const headerTenantId = request.headers.get('x-tenant-id')
+  if (headerTenantId) return headerTenantId
+
   const host = request.headers.get('host') || ''
   const parts = host.split('.')
   const mainDomain = env.MAIN_DOMAIN || ''
   let tenantId = parts[0]
 
   if (host.includes('localhost') || host.includes('127.0.0.1') || parts.length < 3) {
-    tenantId = request.headers.get('x-tenant-id') || 'default'
+    tenantId = 'default'
   } else if (tenantId === 'www') {
     tenantId = parts[1] === mainDomain ? 'default' : parts[1]
   }
@@ -276,7 +280,7 @@ export async function onRequest(context) {
     await db.prepare('INSERT INTO sessions (token, tenant_id, username, role, expires_at) VALUES (?, ?, ?, ?, ?)')
       .bind(token, defaultGroupId, phone, matchedUser.role, expiresAt).run()
 
-    return json({ ok: true, username: phone, role: matchedUser.role, isSuperAdmin: false, mustChangePassword: false, groups, defaultGroupId }, 200, {
+    return json({ ok: true, username: phone, role: matchedUser.role, isSuperAdmin: false, mustChangePassword: false, groups, defaultGroupId, tenantId: defaultGroupId }, 200, {
       'Set-Cookie': cookieHeader(token, secure)
     })
   }

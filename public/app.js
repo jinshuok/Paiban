@@ -124,8 +124,9 @@ function getTenantId() {
 
 function apiHeaders(extra = {}) {
   const h = { ...extra };
-  if (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1')) {
-    h['X-Tenant-Id'] = getTenantId();
+  const tenantId = getTenantId();
+  if (tenantId) {
+    h['X-Tenant-Id'] = tenantId;
   }
   return h;
 }
@@ -397,8 +398,9 @@ async function submitAuth() {
     currentGroupId = data.defaultGroupId;
     myGroups = data.groups || [];
     currentTenantName = myGroups.find(g => g.id === data.defaultGroupId)?.name || data.defaultGroupId;
-    if (data.tenantId && data.tenantId !== '__system') {
-      localStorage.setItem('tenantId', data.tenantId);
+    const savedTenantId = data.tenantId || data.defaultGroupId;
+    if (savedTenantId && savedTenantId !== '__system') {
+      localStorage.setItem('tenantId', savedTenantId);
     }
     if (myGroups.length > 1) {
       showGroupSelector(myGroups, data.defaultGroupId);

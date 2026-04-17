@@ -293,10 +293,17 @@ function genId(prefix) {
 
 // ── Tenant resolution ──
 function resolveTenant(req, res, next) {
+  // 优先从请求头读取，支持固定域名部署和本地开发
+  const headerTenantId = req.headers['x-tenant-id'];
+  if (headerTenantId) {
+    req.tenantId = headerTenantId;
+    return next();
+  }
+
   const host = req.hostname;
   let tenantId = 'default';
   if (host.includes('localhost') || host.includes('127.0.0.1')) {
-    tenantId = req.headers['x-tenant-id'] || 'default';
+    tenantId = 'default';
   } else {
     const parts = host.split('.');
     if (parts.length >= 3) tenantId = parts[0];
@@ -452,7 +459,7 @@ app.post('/api/auth/login', (req, res) => {
   req.session.username = phone;
   req.session.role = matchedUser.role;
   req.session.mustChangePassword = false;
-  res.json({ ok: true, username: phone, role: matchedUser.role, isSuperAdmin: false, mustChangePassword: false, groups, defaultGroupId });
+  res.json({ ok: true, username: phone, role: matchedUser.role, isSuperAdmin: false, mustChangePassword: false, groups, defaultGroupId, tenantId: defaultGroupId });
 });
 
 app.post('/api/auth/logout', (req, res) => {
