@@ -505,52 +505,38 @@ async function loadMyGroups() {
 
 function renderGroupSwitcher() {
   const btn = document.getElementById('groupSwitcherBtn');
-  const menu = document.getElementById('groupSwitcherMenu');
   const options = document.getElementById('groupSwitcherOptions');
   const label = document.getElementById('groupSwitcherLabel');
 
-  const headerChevron = document.getElementById('headerOrgChevron');
-  const headerMenu = document.getElementById('headerOrgMenu');
-  const headerOptions = document.getElementById('headerOrgOptions');
-
   if (!myGroups || myGroups.length <= 1) {
     btn?.classList.add('hidden');
-    headerChevron?.classList.add('hidden');
     return;
   }
 
   btn?.classList.remove('hidden');
-  headerChevron?.classList.remove('hidden');
   const current = myGroups.find(g => g.id === currentGroupId) || myGroups[0];
   if (label) label.textContent = current?.name || current?.id || '—';
 
-  const buildOptions = (container) => {
-    container.innerHTML = myGroups.map(g => `
+  if (options) {
+    options.innerHTML = myGroups.map(g => `
       <button class="group-switch-option w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition flex items-center justify-between" data-id="${g.id}">
         <span>${g.name || g.id}</span>
         <span class="text-xs text-slate-400">${g.role === 'admin' ? '管理员' : '成员'}</span>
       </button>
     `).join('');
 
-    container.querySelectorAll('.group-switch-option').forEach(opt => {
+    options.querySelectorAll('.group-switch-option').forEach(opt => {
       opt.addEventListener('click', async () => {
         const gid = opt.dataset.id;
         if (gid === currentGroupId) {
-          menu?.classList.add('hidden');
-          headerMenu?.classList.add('hidden');
-          headerChevron?.classList.remove('rotate-180');
+          document.getElementById('groupSwitcherMenu')?.classList.add('hidden');
           return;
         }
         await selectGroup(gid);
-        menu?.classList.add('hidden');
-        headerMenu?.classList.add('hidden');
-        headerChevron?.classList.remove('rotate-180');
+        document.getElementById('groupSwitcherMenu')?.classList.add('hidden');
       });
     });
-  };
-
-  if (options) buildOptions(options);
-  if (headerOptions) buildOptions(headerOptions);
+  }
 }
 
 // ═══════════════════════════════════════════════
@@ -613,11 +599,37 @@ function maybeInit() {
     const tenant = getTenantId();
     document.getElementById('settingsOrgId').textContent = tenant;
     document.getElementById('devDocOrgId').textContent = tenant;
+    document.querySelectorAll('.dev-doc-tenant').forEach(el => el.textContent = tenant);
     document.getElementById('settingsOrgName').textContent = currentTenantName || tenant;
     document.getElementById('headerOrgName').textContent = currentTenantName || tenant;
     document.getElementById('headerSubTitle').classList.remove('hidden');
     render();
   }
+}
+
+async function loadDevDocApiKey() {
+  try {
+    const res = await fetch('/api/admin/api-key', { headers: apiHeaders() });
+    if (!res.ok) return;
+    const data = await res.json();
+    const key = data.apiKey || '未设置';
+    const el = document.getElementById('devDocApiKey');
+    if (el) el.textContent = key;
+    document.querySelectorAll('.dev-doc-key').forEach(el => el.textContent = key);
+  } catch (e) {}
+}
+
+async function refreshDevDocApiKey() {
+  try {
+    const res = await fetch('/api/admin/api-key/refresh', { method: 'POST', headers: apiHeaders() });
+    if (!res.ok) { showToast('更新密钥失败'); return; }
+    const data = await res.json();
+    const key = data.apiKey || '';
+    const el = document.getElementById('devDocApiKey');
+    if (el) el.textContent = key;
+    document.querySelectorAll('.dev-doc-key').forEach(el => el.textContent = key);
+    showToast('API 密钥已更新');
+  } catch (e) { showToast('网络错误'); }
 }
 
 function getStatus(id) { return CONFIG.statuses.find(s => s.id === id) || null; }
@@ -1997,7 +2009,9 @@ document.getElementById('logoutBtn')?.addEventListener('click', async () => {
 document.getElementById('devDocBtn')?.addEventListener('click', () => {
   document.getElementById('devDocModal')?.classList.remove('hidden');
   document.getElementById('devDocModal')?.classList.add('flex');
+  loadDevDocApiKey();
 });
+document.getElementById('devDocRefreshKey')?.addEventListener('click', refreshDevDocApiKey);
 document.getElementById('devDocClose')?.addEventListener('click', () => {
   document.getElementById('devDocModal')?.classList.add('hidden');
   document.getElementById('devDocModal')?.classList.remove('flex');
@@ -2037,21 +2051,17 @@ document.getElementById('saTenantUsersModal')?.addEventListener('click', e => {
 document.getElementById('groupSwitcherBtn')?.addEventListener('click', () => {
   document.getElementById('groupSwitcherMenu')?.classList.toggle('hidden');
 });
+document.getElementById('groupSwitcherLogout')?.addEventListener('click', async () => {
+  document.getElementById('groupSwitcherMenu')?.classList.add('hidden');
+  try {
+    const url = isSuperAdmin ? '/api/superadmin/logout' : '/api/auth/logout';
+    await fetch(url, { method: 'POST', headers: apiHeaders() });
+  } catch (e) {}
+  resetAuthState();
+  showAuthScreen();
+});
 document.addEventListener('click', (e) => {
   if (!e.target.closest('#groupSwitcherWrap')) {
     document.getElementById('groupSwitcherMenu')?.classList.add('hidden');
   }
-  if (!e.target.closest('#headerOrgWrap')) {
-    document.getElementById('headerOrgMenu')?.classList.add('hidden');
-    document.getElementById('headerOrgChevron')?.classList.remove('rotate-180');
-  }
-});
-
-// Header org switcher
-document.getElementById('headerOrgClick')?.addEventListener('click', () => {
-  if (!myGroups || myGroups.length <= 1) return;
-  const menu = document.getElementById('headerOrgMenu');
-  const chevron = document.getElementById('headerOrgChevron');
-  menu?.classList.toggle('hidden');
-  chevron?.classList.toggle('rotate-180');
 });

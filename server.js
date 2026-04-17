@@ -100,6 +100,12 @@ db.exec(`
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(tenant_id, member_id, year, month, day)
   );
+
+  CREATE TABLE IF NOT EXISTS api_keys (
+    tenant_id TEXT PRIMARY KEY NOT NULL,
+    api_key TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Migrate config table to include tenant_id (legacy -> new)
@@ -201,11 +207,25 @@ function migrateUsersSchema() {
   console.log('[Migrate] users table migrated to multi-group schema');
 }
 
+function migrateApiKeys() {
+  const cols = db.prepare("PRAGMA table_info(api_keys)").all();
+  if (cols.length === 0) {
+    db.exec(`
+      CREATE TABLE api_keys (
+        tenant_id TEXT PRIMARY KEY NOT NULL,
+        api_key TEXT NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+  }
+}
+
 migrateConfig();
 migrateSchedules();
 migrateLegacyTenants();
 migrateTenantsAddName();
 migrateUsersSchema();
+migrateApiKeys();
 
 function seedSuperAdmin() {
   const exists = db.prepare("SELECT 1 FROM super_admins LIMIT 1").get();
@@ -331,9 +351,29 @@ function resolveTenant(req, res, next) {
   next();
 }
 
+function getApiKey(tenantId) {
+  const row = db.prepare("SELECT api_key FROM api_keys WHERE tenant_id = ?").get(tenantId);
+  return row ? row.api_key : null;
+}
+
+function refreshApiKey(tenantId) {
+  const key = crypto.randomBytes(32).toString('hex');
+  db.prepare("INSERT OR REPLACE INTO api_keys (tenant_id, api_key, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)")
+    .run(tenantId, key);
+  return key;
+}
+
 function requireAuth(req, res, next) {
   if (req.session && (req.session.tenantId === req.tenantId || req.session.role === 'superadmin')) {
     return next();
+  }
+  // 支持 API Key 外部调用
+  const apiKey = req.headers['x-api-key'];
+  if (apiKey) {
+    const stored = getApiKey(req.tenantId);
+    if (stored && stored === apiKey) {
+      return next();
+    }
   }
   res.status(401).json({ error: 'Unauthorized' });
 }
@@ -585,6 +625,16 @@ app.post('/api/admin/reset-password', resolveTenant, requireAuth, requireAdmin, 
   db.prepare('UPDATE users SET password_hash = ? WHERE tenant_id = ? AND username = ?')
     .run(hashPassword(newPassword), req.tenantId, username);
   res.json({ ok: true });
+});
+
+app.get('/api/admin/api-key', resolveTenant, requireAuth, requireAdmin, (req, res) => {
+  const key = getApiKey(req.tenantId);
+  res.json({ apiKey: key || '' });
+});
+
+app.post('/api/admin/api-key/refresh', resolveTenant, requireAuth, requireAdmin, (req, res) => {
+  const key = refreshApiKey(req.tenantId);
+  res.json({ apiKey: key });
 });
 
 // ── Super Admin routes ──

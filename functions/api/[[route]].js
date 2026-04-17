@@ -117,6 +117,7 @@ async function initSchema(db) {
     `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'member', is_creator INTEGER NOT NULL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, username TEXT NOT NULL, role TEXT NOT NULL, expires_at DATETIME NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS super_admins (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, must_change_password INTEGER NOT NULL DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE TABLE IF NOT EXISTS api_keys (tenant_id TEXT PRIMARY KEY NOT NULL, api_key TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE INDEX IF NOT EXISTS idx_schedules_tenant ON schedules(tenant_id)`,
     `CREATE INDEX IF NOT EXISTS idx_schedules_tenant_ym ON schedules(tenant_id, year, month)`,
     `CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`
@@ -198,6 +199,18 @@ async function getUserGroups(db, username) {
     ORDER BY u.created_at DESC
   `).bind(username).all()
   return results || []
+}
+
+async function getApiKey(db, tenantId) {
+  const row = await db.prepare('SELECT api_key FROM api_keys WHERE tenant_id = ?').bind(tenantId).first()
+  return row ? row.api_key : null
+}
+
+async function refreshApiKey(db, tenantId) {
+  const key = crypto.randomBytes(32).toString('hex')
+  await db.prepare('INSERT OR REPLACE INTO api_keys (tenant_id, api_key, updated_at) VALUES (?, ?, datetime("now"))')
+    .bind(tenantId, key).run()
+  return key
 }
 
 export async function onRequest(context) {
@@ -476,8 +489,18 @@ export async function onRequest(context) {
   }
 
   // ── Auth guard for tenant routes ──
+  let apiKeyAuth = false
   if (!session || session.tenant_id !== tenantId) {
-    return json({ error: 'Unauthorized' }, 401)
+    const apiKey = request.headers.get('x-api-key')
+    if (apiKey) {
+      const stored = await getApiKey(db, tenantId)
+      if (stored && stored === apiKey) {
+        apiKeyAuth = true
+      }
+    }
+    if (!apiKeyAuth) {
+      return json({ error: 'Unauthorized' }, 401)
+    }
   }
 
   await ensureTenant(db, tenantId)
@@ -485,6 +508,7 @@ export async function onRequest(context) {
   // ── Protected routes ──
 
   if (pathname === '/api/admin/reset-password' && method === 'POST') {
+    if (apiKeyAuth) return json({ error: '需要管理员权限' }, 403)
     if (session.role !== 'admin') return json({ error: '需要管理员权限' }, 403)
     const body = await request.json().catch(() => ({}))
     const { username, newPassword } = body
@@ -499,6 +523,20 @@ export async function onRequest(context) {
     return json({ ok: true })
   }
 
+  if (pathname === '/api/admin/api-key' && method === 'GET') {
+    if (apiKeyAuth) return json({ error: '需要管理员权限' }, 403)
+    if (session.role !== 'admin') return json({ error: '需要管理员权限' }, 403)
+    const key = await getApiKey(db, tenantId)
+    return json({ apiKey: key || '' })
+  }
+
+  if (pathname === '/api/admin/api-key/refresh' && method === 'POST') {
+    if (apiKeyAuth) return json({ error: '需要管理员权限' }, 403)
+    if (session.role !== 'admin') return json({ error: '需要管理员权限' }, 403)
+    const key = await refreshApiKey(db, tenantId)
+    return json({ apiKey: key })
+  }
+
   if (pathname === '/api/config' && method === 'GET') {
     const row = await db.prepare('SELECT value FROM tenant_configs WHERE tenant_id = ?').bind(tenantId).first()
     const cfg = row ? JSON.parse(row.value) : JSON.parse(JSON.stringify(DEFAULT_CONFIG))
@@ -511,6 +549,7 @@ export async function onRequest(context) {
   }
 
   if (pathname === '/api/config' && method === 'POST') {
+    if (apiKeyAuth) return json({ error: '需要管理员权限' }, 403)
     if (session.role !== 'admin') return json({ error: '需要管理员权限' }, 403)
     try {
       const body = await request.json()

@@ -132,16 +132,9 @@
 <header class="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-3 shrink-0 z-30">
   <div class="flex items-center gap-2">
     <div class="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-semibold text-sm">班</div>
-    <div class="flex flex-col leading-none relative" id="headerOrgWrap">
-      <div class="flex items-center gap-1 cursor-pointer" id="headerOrgClick">
-        <span id="headerOrgName" class="font-semibold text-slate-800 tracking-tight">排班大师</span>
-        <svg id="headerOrgChevron" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="text-slate-500 transition-transform hidden"><path d="M19 9l-7 7-7-7"/></svg>
-      </div>
+    <div class="flex flex-col leading-none" id="headerOrgWrap">
+      <span id="headerOrgName" class="font-semibold text-slate-800 tracking-tight">排班大师</span>
       <span id="headerSubTitle" class="text-[10px] text-slate-400 font-medium mt-0.5 hidden">排班表</span>
-      <div id="headerOrgMenu" class="hidden absolute left-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-40 overflow-hidden">
-        <div class="px-3 py-2 text-xs font-medium text-slate-400 border-b border-slate-100">切换组织</div>
-        <div id="headerOrgOptions" class="max-h-56 overflow-y-auto"></div>
-      </div>
     </div>
   </div>
   <div class="w-px h-5 bg-slate-200 hidden sm:block"></div>
@@ -167,6 +160,11 @@
       <div id="groupSwitcherMenu" class="hidden absolute right-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-40 overflow-hidden">
         <div class="px-3 py-2 text-xs font-medium text-slate-400 border-b border-slate-100">切换组织</div>
         <div id="groupSwitcherOptions" class="max-h-56 overflow-y-auto"></div>
+        <div class="border-t border-slate-100"></div>
+        <button id="groupSwitcherLogout" class="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition flex items-center gap-2">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+          退出登录
+        </button>
       </div>
     </div>
 
@@ -267,46 +265,90 @@
 
 <!-- DevDoc Modal -->
 <div id="devDocModal" class="hidden fixed inset-0 bg-black/40 z-[400] items-center justify-center">
-  <div class="bg-white rounded-2xl shadow-2xl w-[800px] max-w-[95vw] max-h-[85vh] flex flex-col">
+  <div class="bg-white rounded-2xl shadow-2xl w-[840px] max-w-[95vw] max-h-[85vh] flex flex-col">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
       <span class="font-semibold text-slate-800 text-base">开发文档</span>
       <button id="devDocClose" class="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center text-sm transition">✕</button>
     </div>
-    <div class="flex-1 overflow-y-auto p-5 text-sm text-slate-700 space-y-5">
-      <div>
-        <h3 class="font-semibold text-slate-800 mb-2">API 基础信息</h3>
-        <p>所有数据接口需要在登录态下访问。本地开发时通过请求头 <code class="bg-slate-100 px-1 rounded">X-Tenant-Id</code> 指定租户；线上通过子域名自动识别。</p>
+    <div class="flex-1 overflow-y-auto p-5 text-sm text-slate-700 space-y-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="p-4 rounded-xl border border-slate-200 bg-slate-50">
+          <div class="text-xs font-medium text-slate-500 mb-1">组织 ID（X-Tenant-Id）</div>
+          <div class="font-mono text-slate-900 font-semibold" id="devDocOrgId">default</div>
+          <div class="text-[11px] text-slate-400 mt-1">所有接口调用时必须附带此请求头</div>
+        </div>
+        <div class="p-4 rounded-xl border border-slate-200 bg-slate-50">
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-xs font-medium text-slate-500">API 密钥（X-Api-Key）</div>
+            <button id="devDocRefreshKey" class="text-[11px] px-2 py-0.5 rounded bg-indigo-600 text-white hover:bg-indigo-700 transition">更新密钥</button>
+          </div>
+          <div class="font-mono text-slate-900 font-semibold truncate" id="devDocApiKey">—</div>
+          <div class="text-[11px] text-slate-400 mt-1">用于外部系统无登录态调用，仅限只读接口</div>
+        </div>
       </div>
+
       <div>
-        <h3 class="font-semibold text-slate-800 mb-2">当前组织 ID</h3>
-        <pre class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto"><code id="devDocOrgId">default</code></pre>
-        <p class="text-xs text-slate-500 mt-1">成员可通过此 ID 加入您的组织</p>
+        <h3 class="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">GET</span>
+          获取配置（成员、状态、分组）
+        </h3>
+        <div class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto font-mono text-xs leading-relaxed">
+<code>GET /api/config
+X-Tenant-Id: <span class="dev-doc-tenant">default</span>
+X-Api-Key: <span class="dev-doc-key">your-api-key</span></code>
+        </div>
+        <div class="mt-2 text-xs text-slate-500">响应示例</div>
+        <pre class="bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto text-xs leading-relaxed mt-1">{
+  "groups": [{ "id": "g1", "name": "销售部" }],
+  "members": [{ "id": "m1", "name": "张三", "uid": "zhangsan", "groupId": "g1" }],
+  "statuses": [{ "id": "work", "label": "正常班", "short": "班", "color": "#2563eb" }],
+  "clickCycle": ["work", "duty", "rest", null],
+  "stats": [{ "countAs": "work", "label": "班", "color": "#2563eb" }]
+}</pre>
       </div>
+
       <div>
-        <h3 class="font-semibold text-slate-800 mb-2">1. 获取当前身份</h3>
-        <pre class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto"><code>GET /api/auth/me</code></pre>
+        <h3 class="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">GET</span>
+          获取某月排班数据
+        </h3>
+        <div class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto font-mono text-xs leading-relaxed">
+<code>GET /api/schedule/2026/4
+X-Tenant-Id: <span class="dev-doc-tenant">default</span>
+X-Api-Key: <span class="dev-doc-key">your-api-key</span></code>
+        </div>
+        <div class="mt-2 text-xs text-slate-500">响应示例</div>
+        <pre class="bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto text-xs leading-relaxed mt-1">{
+  "m1-2026-4-1": "work",
+  "m1-2026-4-2": "rest",
+  "m2-2026-4-1": "duty"
+}</pre>
+        <div class="text-[11px] text-slate-400 mt-1">键名格式：<code>memberId-year-month-day</code>，值为 statusId</div>
       </div>
+
       <div>
-        <h3 class="font-semibold text-slate-800 mb-2">2. 获取配置（成员、状态）</h3>
-        <pre class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto"><code>GET /api/config</code></pre>
-      </div>
-      <div>
-        <h3 class="font-semibold text-slate-800 mb-2">3. 获取某月排班</h3>
-        <pre class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto"><code>GET /api/schedule/{year}/{month}</code></pre>
-      </div>
-      <div>
-        <h3 class="font-semibold text-slate-800 mb-2">4. 保存排班数据</h3>
-        <pre class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto"><code>POST /api/schedule/{year}/{month}
+        <h3 class="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">POST</span>
+          保存排班数据
+        </h3>
+        <div class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto font-mono text-xs leading-relaxed">
+<code>POST /api/schedule/2026/4
 Content-Type: application/json
+X-Tenant-Id: <span class="dev-doc-tenant">default</span>
+X-Api-Key: <span class="dev-doc-key">your-api-key</span>
 
 {
   "m1-2026-4-16": "duty",
-  "m2-2026-4-16": "rest"
-}</code></pre>
+  "m2-2026-4-16": "rest",
+  "m1-2026-4-17": null
+}</code>
+        </div>
+        <div class="text-[11px] text-slate-400 mt-1">传 <code>null</code> 可清除对应日期的排班；此接口需要密钥对应的租户具备写权限校验（登录态下可直接调用）</div>
       </div>
-      <div>
-        <h3 class="font-semibold text-slate-800 mb-2">5. ScheduleAPI（页面内全局对象）</h3>
-        <pre class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto"><code>// 获取所有成员
+
+      <div class="pt-4 border-t border-slate-100">
+        <h3 class="font-semibold text-slate-800 mb-2">页面内全局对象（ScheduleAPI）</h3>
+        <pre class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto text-xs leading-relaxed"><code>// 获取所有成员
 ScheduleAPI.getMembers()
 
 // 根据账号ID获取成员
