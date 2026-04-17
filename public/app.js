@@ -1427,28 +1427,27 @@ document.querySelectorAll('.modal-tab').forEach(tab => {
     renderModalTab();
   });
 });
-document.getElementById('settingsModal').addEventListener('click', e => {
-  if (e.target === document.getElementById('settingsModal')) closeSettings();
-});
+document.getElementById('settingsOverlay')?.addEventListener('click', closeSettings);
 
-function openSettings() {
+function openSettings(tab = 'members') {
   editGroups = JSON.parse(JSON.stringify(CONFIG.groups));
   editMembers = JSON.parse(JSON.stringify(CONFIG.members));
   editStatuses = JSON.parse(JSON.stringify(CONFIG.statuses));
-  currentModalTab = 'members';
+  currentModalTab = tab;
   document.querySelectorAll('.modal-tab').forEach(t => {
-    t.classList.toggle('active', t.dataset.tab === 'members');
-    t.classList.toggle('bg-indigo-600', t.dataset.tab === 'members');
-    t.classList.toggle('text-white', t.dataset.tab === 'members');
-    t.classList.toggle('text-slate-500', t.dataset.tab !== 'members');
+    const isActive = t.dataset.tab === tab;
+    t.classList.toggle('active', isActive);
+    t.classList.toggle('bg-indigo-600', isActive);
+    t.classList.toggle('text-white', isActive);
+    t.classList.toggle('text-slate-500', !isActive);
   });
   renderModalTab();
   document.getElementById('settingsModal').classList.remove('hidden');
-  document.getElementById('settingsModal').classList.add('flex');
+  document.getElementById('settingsDrawer').classList.remove('translate-x-full');
 }
 function closeSettings() {
   document.getElementById('settingsModal').classList.add('hidden');
-  document.getElementById('settingsModal').classList.remove('flex');
+  document.getElementById('settingsDrawer').classList.add('translate-x-full');
 }
 function saveSettings() {
   CONFIG.groups = editGroups;
@@ -1466,9 +1465,12 @@ function renderModalTab() {
   if (currentModalTab === 'members') {
     body.innerHTML = renderMembersTab();
     bindMembersTab();
-  } else {
+  } else if (currentModalTab === 'statuses') {
     body.innerHTML = renderStatusesTab();
     bindStatusesTab();
+  } else if (currentModalTab === 'devdoc') {
+    body.innerHTML = renderDevDocTab();
+    bindDevDocTab();
   }
 }
 
@@ -1556,7 +1558,148 @@ function bindMembersTab() {
   });
 }
 
-function renderStatusesTab() {
+function renderDevDocTab() {
+  return `
+    <div class="text-sm text-slate-700 space-y-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="p-4 rounded-xl border border-slate-200 bg-slate-50">
+          <div class="text-xs font-medium text-slate-500 mb-1">组织 ID（X-Tenant-Id）</div>
+          <div class="font-mono text-slate-900 font-semibold" id="devDocOrgId">default</div>
+          <div class="text-[11px] text-slate-400 mt-1">所有接口调用时必须附带此请求头</div>
+        </div>
+        <div class="p-4 rounded-xl border border-slate-200 bg-slate-50">
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-xs font-medium text-slate-500">API 密钥（X-Api-Key）</div>
+            <button id="devDocRefreshKey" class="text-[11px] px-2 py-0.5 rounded bg-indigo-600 text-white hover:bg-indigo-700 transition">更新密钥</button>
+          </div>
+          <div class="font-mono text-slate-900 font-semibold truncate" id="devDocApiKey">—</div>
+          <div class="text-[11px] text-slate-400 mt-1">用于外部系统无登录态调用，仅限只读接口</div>
+        </div>
+      </div>
+
+      <div>
+        <h3 class="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">GET</span>
+          获取配置（成员、状态、分组）
+        </h3>
+        <div class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto font-mono text-xs leading-relaxed">
+<code>GET /api/config
+X-Tenant-Id: <span class="dev-doc-tenant">default</span>
+X-Api-Key: <span class="dev-doc-key">your-api-key</span></code>
+        </div>
+        <div class="mt-2 text-xs text-slate-500">响应示例</div>
+        <pre class="bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto text-xs leading-relaxed mt-1">{
+  "groups": [{ "id": "g1", "name": "销售部" }],
+  "members": [{ "id": "m1", "name": "张三", "uid": "zhangsan", "groupId": "g1" }],
+  "statuses": [{ "id": "work", "label": "正常班", "short": "班", "color": "#2563eb" }],
+  "clickCycle": ["work", "duty", "rest", null],
+  "stats": [{ "countAs": "work", "label": "班", "color": "#2563eb" }]
+}</pre>
+      </div>
+
+      <div>
+        <h3 class="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">GET</span>
+          获取某月排班数据
+        </h3>
+        <div class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto font-mono text-xs leading-relaxed">
+<code>GET /api/schedule/2026/4
+X-Tenant-Id: <span class="dev-doc-tenant">default</span>
+X-Api-Key: <span class="dev-doc-key">your-api-key</span></code>
+        </div>
+        <div class="mt-2 text-xs text-slate-500">响应示例</div>
+        <pre class="bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto text-xs leading-relaxed mt-1">{
+  "m1-2026-4-1": "work",
+  "m1-2026-4-2": "rest",
+  "m2-2026-4-1": "duty"
+}</pre>
+        <div class="text-[11px] text-slate-400 mt-1">键名格式：<code>memberId-year-month-day</code>，值为 statusId</div>
+      </div>
+
+      <div>
+        <h3 class="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700">POST</span>
+          保存排班数据
+        </h3>
+        <div class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto font-mono text-xs leading-relaxed">
+<code>POST /api/schedule/2026/4
+Content-Type: application/json
+X-Tenant-Id: <span class="dev-doc-tenant">default</span>
+X-Api-Key: <span class="dev-doc-key">your-api-key</span>
+
+{
+  "m1-2026-4-16": "duty",
+  "m2-2026-4-16": "rest",
+  "m1-2026-4-17": null
+}</code>
+        </div>
+        <div class="text-[11px] text-slate-400 mt-1">传 <code>null</code> 可清除对应日期的排班；此接口需要密钥对应的租户具备写权限校验（登录态下可直接调用）</div>
+      </div>
+
+      <div>
+        <h3 class="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">GET</span>
+          根据第三方账号或手机号读取某人值班状态
+        </h3>
+        <div class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto font-mono text-xs leading-relaxed">
+<code>GET /api/schedule/member?uid=zhangsan&date=2026-04-16
+X-Tenant-Id: <span class="dev-doc-tenant">default</span>
+X-Api-Key: <span class="dev-doc-key">your-api-key</span></code>
+        </div>
+        <div class="mt-2 text-xs text-slate-500">参数说明</div>
+        <ul class="text-xs text-slate-500 mt-1 list-disc list-inside">
+          <li><code>uid</code> 或 <code>phone</code>：第三方账号或手机号</li>
+          <li><code>date</code>：日期，格式 YYYY-MM-DD</li>
+        </ul>
+        <div class="mt-2 text-xs text-slate-500">响应示例</div>
+        <pre class="bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto text-xs leading-relaxed mt-1">{
+  "member": { "id": "m1", "name": "张三", "uid": "zhangsan", "groupId": "g1" },
+  "status": { "id": "work", "label": "正常班", "short": "班", "color": "#2563eb" },
+  "date": "2026-04-16"
+}</pre>
+      </div>
+
+      <div>
+        <h3 class="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">GET</span>
+          批量读取一个组织的某天值班数据
+        </h3>
+        <div class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto font-mono text-xs leading-relaxed">
+<code>GET /api/schedule/day/2026-04-16
+X-Tenant-Id: <span class="dev-doc-tenant">default</span>
+X-Api-Key: <span class="dev-doc-key">your-api-key</span></code>
+        </div>
+        <div class="mt-2 text-xs text-slate-500">响应示例</div>
+        <pre class="bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto text-xs leading-relaxed mt-1">[
+  {
+    "member": { "id": "m1", "name": "张三", "uid": "zhangsan", "groupId": "g1" },
+    "status": { "id": "work", "label": "正常班", "short": "班", "color": "#2563eb" },
+    "date": "2026-04-16"
+  },
+  {
+    "member": { "id": "m2", "name": "李四", "uid": "lisi", "groupId": "g1" },
+    "status": { "id": "rest", "label": "休息", "short": "休", "color": "#f59e0b" },
+    "date": "2026-04-16"
+  }
+]</pre>
+      </div>
+
+      <div class="pt-4 border-t border-slate-100">
+        <h3 class="font-semibold text-slate-800 mb-2">页面内全局对象（ScheduleAPI）</h3>
+        <pre class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto text-xs leading-relaxed"><code>// 获取所有成员
+ScheduleAPI.getMembers()
+
+// 根据账号ID获取成员
+ScheduleAPI.getMemberByUid("zhangsan")
+
+// 获取某人某日排班
+ScheduleAPI.getScheduleByDate("m1", "2026-04-16")
+
+// 获取某天所有人排班
+ScheduleAPI.getDaySchedule("2026-04-16")</code></pre>
+      </div>
+    </div>`;
+}
   return `
     <table class="w-full text-sm border-collapse" id="statusesTable">
       <thead>
@@ -1595,7 +1738,9 @@ function renderStatusesTab() {
     <div class="mt-3 text-xs text-slate-400">💡 不设置上班时间 = 不到岗（假期/调休）；勾选"快捷切换"后，点击格子可循环切换该状态。</div>`;
 }
 
-function bindStatusesTab() {
+function bindDevDocTab() {
+  document.getElementById('devDocRefreshKey')?.addEventListener('click', refreshDevDocApiKey);
+}
   function syncStatuses() {
     document.querySelectorAll('#statusesTable tbody tr').forEach((tr, i) => {
       if (!editStatuses[i]) return;
@@ -2064,15 +2209,10 @@ document.getElementById('userLogoutBtn')?.addEventListener('click', async () => 
 
 // DevDoc
 document.getElementById('devDocBtn')?.addEventListener('click', () => {
-  document.getElementById('devDocModal')?.classList.remove('hidden');
-  document.getElementById('devDocModal')?.classList.add('flex');
+  openSettings('devdoc');
   loadDevDocApiKey();
 });
 document.getElementById('devDocRefreshKey')?.addEventListener('click', refreshDevDocApiKey);
-document.getElementById('devDocClose')?.addEventListener('click', () => {
-  document.getElementById('devDocModal')?.classList.add('hidden');
-  document.getElementById('devDocModal')?.classList.remove('flex');
-});
 document.getElementById('devDocModal')?.addEventListener('click', e => {
   if (e.target === document.getElementById('devDocModal')) {
     document.getElementById('devDocModal')?.classList.add('hidden');
