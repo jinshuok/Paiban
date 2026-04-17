@@ -132,6 +132,36 @@ function getTenantId() {
   return 'default';
 }
 
+function getBaseDomain() {
+  const host = window.location.hostname;
+  if (host.includes('localhost') || host.includes('127.0.0.1')) return host;
+  const parts = host.split('.');
+  if (parts.length >= 3) {
+    return parts.slice(1).join('.');
+  }
+  return host;
+}
+
+function isSubdomainDeployment() {
+  const host = window.location.hostname;
+  if (host.includes('localhost') || host.includes('127.0.0.1')) return false;
+  const parts = host.split('.');
+  return parts.length >= 3;
+}
+
+function navigateToTenant(tenantId) {
+  if (!tenantId || tenantId === 'default') {
+    window.location.href = '/';
+    return;
+  }
+  if (isSubdomainDeployment()) {
+    const base = getBaseDomain();
+    window.location.href = `https://${tenantId}.${base}/`;
+  } else {
+    window.location.href = `/${tenantId}`;
+  }
+}
+
 function apiHeaders(extra = {}) {
   const h = { ...extra };
   const tenantId = getTenantId();
@@ -331,14 +361,8 @@ async function submitAuth() {
       currentGroupId = data.tenantId;
       currentTenantName = data.tenantName || data.tenantId;
       localStorage.setItem('tenantId', data.tenantId);
-      // 固定域名部署：新注册组织后跳转到子目录路径
-      const isSubdomain = window.location.hostname.split('.').length >= 3 && !window.location.hostname.includes('localhost');
-      if (!isSubdomain && !window.location.pathname.startsWith(`/${data.tenantId}`)) {
-        window.location.href = `/${data.tenantId}`;
-        return;
-      }
-      hideAuthScreen();
-      loadConfig(); loadData();
+      navigateToTenant(data.tenantId);
+      return;
     } else {
       const data = await res.json().catch(() => ({}));
       errorEl.textContent = data.error || '创建失败';
@@ -383,8 +407,8 @@ async function submitAuth() {
       currentGroupId = data.tenantId;
       currentTenantName = data.tenantName || data.tenantId;
       localStorage.setItem('tenantId', data.tenantId);
-      hideAuthScreen();
-      loadConfig(); loadData();
+      navigateToTenant(data.tenantId);
+      return;
     } else {
       const data = await res.json().catch(() => ({}));
       errorEl.textContent = data.error || '注册失败';
@@ -421,14 +445,8 @@ async function submitAuth() {
     if (myGroups.length > 1) {
       showGroupSelector(myGroups, data.defaultGroupId);
     } else {
-      // 固定域名部署：单组织登录后跳转到子目录路径
-      const isSubdomain = window.location.hostname.split('.').length >= 3 && !window.location.hostname.includes('localhost');
-      if (!isSubdomain && !window.location.pathname.startsWith(`/${data.defaultGroupId}`)) {
-        window.location.href = `/${data.defaultGroupId}`;
-        return;
-      }
-      hideAuthScreen();
-      loadConfig(); loadData();
+      navigateToTenant(data.defaultGroupId);
+      return;
     }
   } else {
     const data = await res.json().catch(() => ({}));
@@ -487,15 +505,8 @@ async function selectGroup(groupId) {
     const group = myGroups.find(g => g.id === groupId);
     currentTenantName = group?.name || groupId;
     localStorage.setItem('tenantId', groupId);
-    // 固定域名部署：切换组织后跳转到对应子目录路径
-    const isSubdomain = window.location.hostname.split('.').length >= 3 && !window.location.hostname.includes('localhost');
-    if (!isSubdomain && !window.location.pathname.startsWith(`/${groupId}`)) {
-      window.location.href = `/${groupId}`;
-      return;
-    }
-    document.getElementById('groupSelectorModal')?.classList.add('hidden');
-    hideAuthScreen();
-    loadConfig(); loadData();
+    navigateToTenant(groupId);
+    return;
   } else {
     const data = await res.json().catch(() => ({}));
     showToast(data.error || '切换组织失败');
@@ -519,35 +530,48 @@ function renderGroupSwitcher() {
   const options = document.getElementById('groupSwitcherOptions');
   const label = document.getElementById('groupSwitcherLabel');
 
+  const headerChevron = document.getElementById('headerOrgChevron');
+  const headerMenu = document.getElementById('headerOrgMenu');
+  const headerOptions = document.getElementById('headerOrgOptions');
+
   if (!myGroups || myGroups.length <= 1) {
     btn?.classList.add('hidden');
+    headerChevron?.classList.add('hidden');
     return;
   }
 
   btn?.classList.remove('hidden');
+  headerChevron?.classList.remove('hidden');
   const current = myGroups.find(g => g.id === currentGroupId) || myGroups[0];
   if (label) label.textContent = current?.name || current?.id || '—';
 
-  if (options) {
-    options.innerHTML = myGroups.map(g => `
+  const buildOptions = (container) => {
+    container.innerHTML = myGroups.map(g => `
       <button class="group-switch-option w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition flex items-center justify-between" data-id="${g.id}">
         <span>${g.name || g.id}</span>
         <span class="text-xs text-slate-400">${g.role === 'admin' ? '管理员' : '成员'}</span>
       </button>
     `).join('');
 
-    options.querySelectorAll('.group-switch-option').forEach(opt => {
+    container.querySelectorAll('.group-switch-option').forEach(opt => {
       opt.addEventListener('click', async () => {
         const gid = opt.dataset.id;
         if (gid === currentGroupId) {
           menu?.classList.add('hidden');
+          headerMenu?.classList.add('hidden');
+          headerChevron?.classList.remove('rotate-180');
           return;
         }
         await selectGroup(gid);
         menu?.classList.add('hidden');
+        headerMenu?.classList.add('hidden');
+        headerChevron?.classList.remove('rotate-180');
       });
     });
-  }
+  };
+
+  if (options) buildOptions(options);
+  if (headerOptions) buildOptions(headerOptions);
 }
 
 // ═══════════════════════════════════════════════
@@ -2038,4 +2062,17 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('#groupSwitcherWrap')) {
     document.getElementById('groupSwitcherMenu')?.classList.add('hidden');
   }
+  if (!e.target.closest('#headerOrgWrap')) {
+    document.getElementById('headerOrgMenu')?.classList.add('hidden');
+    document.getElementById('headerOrgChevron')?.classList.remove('rotate-180');
+  }
+});
+
+// Header org switcher
+document.getElementById('headerOrgClick')?.addEventListener('click', () => {
+  if (!myGroups || myGroups.length <= 1) return;
+  const menu = document.getElementById('headerOrgMenu');
+  const chevron = document.getElementById('headerOrgChevron');
+  menu?.classList.toggle('hidden');
+  chevron?.classList.toggle('rotate-180');
 });
