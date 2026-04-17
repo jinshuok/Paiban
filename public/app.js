@@ -668,6 +668,34 @@ async function refreshDevDocApiKey() {
 }
 
 function getStatus(id) { return CONFIG.statuses.find(s => s.id === id) || null; }
+function getStatusCountAs(st) {
+  return st.countAs || (st.id === 'rest' ? 'rest' : (st.timeStart ? 'work' : 'leave'));
+}
+function formatStatCount(n) {
+  return Number.isInteger(n) ? n : n.toFixed(1);
+}
+function calculateMemberStats(memberId) {
+  const counts = { work: 0, duty: 0, rest: 0, leave: 0 };
+  CONFIG.stats.forEach(s => { if (!(s.countAs in counts)) counts[s.countAs] = 0; });
+  for (const key in scheduleData) {
+    if (key.startsWith(`${memberId}-${year}-${month}-`)) {
+      const st = getStatus(scheduleData[key]);
+      if (st) {
+        const ca = getStatusCountAs(st);
+        const dayCount = st.dayCount !== undefined ? st.dayCount : (st.timeStart ? 1 : 0);
+        if (ca === 'work' || ca === 'duty') {
+          counts[ca] = (counts[ca] || 0) + dayCount;
+          counts['rest'] = (counts['rest'] || 0) + (1 - dayCount);
+        } else if (ca === 'rest') {
+          counts['rest'] = (counts['rest'] || 0) + (1 - dayCount);
+        } else {
+          counts[ca] = (counts[ca] || 0) + 1;
+        }
+      }
+    }
+  }
+  return counts;
+}
 
 // ═══════════════════════════════════════════════
 //  HELPERS
@@ -752,9 +780,10 @@ function renderTable() {
   }
 
   const statCol = document.createElement('div');
-  statCol.className = 'w-20 min-w-[80px] shrink-0 flex items-center justify-center text-[10px] font-semibold text-slate-400 border-l-2 border-slate-300 bg-slate-50';
-  statCol.textContent = '统计';
+  statCol.className = 'w-20 min-w-[80px] shrink-0 flex flex-col items-center justify-center text-[10px] font-semibold text-slate-400 border-l-2 border-slate-300 bg-slate-50 gap-0.5';
+  statCol.innerHTML = `<span>统计</span><a href="#" id="desktopExportLink" class="text-blue-600 hover:underline font-normal text-[10px]">导出</a>`;
   head.appendChild(statCol);
+  document.getElementById('desktopExportLink')?.addEventListener('click', (e) => { e.preventDefault(); exportExcel(); });
 
   const body = document.getElementById('tableBody');
   body.innerHTML = '';
@@ -1012,20 +1041,10 @@ function applyCellStatus(cell, statusId) {
 function updateStat(memberId) {
   const el = document.getElementById(`stat-${memberId}`);
   if (!el) return;
-  const counts = {};
-  CONFIG.stats.forEach(s => counts[s.countAs] = 0);
-  for (const key in scheduleData) {
-    if (key.startsWith(`${memberId}-${year}-${month}-`)) {
-      const st = getStatus(scheduleData[key]);
-      if (st) {
-        const countAs = st.countAs || (st.timeStart ? 'work' : 'leave');
-        if (counts[countAs] !== undefined) counts[countAs]++;
-      }
-    }
-  }
+  const counts = calculateMemberStats(memberId);
   el.innerHTML = CONFIG.stats
     .filter(s => counts[s.countAs] > 0)
-    .map(s => `<span class="text-[10px] font-semibold px-1 py-0.5 rounded" style="background:${s.color}18;color:${s.color}">${s.label}${counts[s.countAs]}</span>`)
+    .map(s => `<span class="text-[10px] font-semibold px-1 py-0.5 rounded" style="background:${s.color}18;color:${s.color}">${s.label}${formatStatCount(counts[s.countAs])}</span>`)
     .join('');
 }
 
@@ -1156,23 +1175,13 @@ function renderMobileView() {
   mobileView.appendChild(calContainer);
 
   // Stats
-  const counts = {};
-  CONFIG.stats.forEach(s => counts[s.countAs] = 0);
-  for (const key in scheduleData) {
-    if (key.startsWith(`${currentMember.id}-${year}-${month}-`)) {
-      const st = getStatus(scheduleData[key]);
-      if (st) {
-        const ca = st.countAs || (st.timeStart ? 'work' : 'leave');
-        if (counts[ca] !== undefined) counts[ca]++;
-      }
-    }
-  }
+  const counts = calculateMemberStats(currentMember.id);
 
   const statsDiv = document.createElement('div');
   statsDiv.className = 'bg-slate-100 rounded-xl p-3 flex flex-wrap gap-2';
   statsDiv.innerHTML = CONFIG.stats
     .filter(s => counts[s.countAs] > 0)
-    .map(s => `<div class="flex items-center gap-1 text-xs"><span class="font-semibold px-1.5 py-0.5 rounded" style="background:${s.color}18;color:${s.color}">${s.label}${counts[s.countAs]}</span></div>`)
+    .map(s => `<div class="flex items-center gap-1 text-xs"><span class="font-semibold px-1.5 py-0.5 rounded" style="background:${s.color}18;color:${s.color}">${s.label}${formatStatCount(counts[s.countAs])}</span></div>`)
     .join('') || '<span class="text-slate-400 text-xs">暂无排班</span>';
   mobileView.appendChild(statsDiv);
 }
@@ -1286,22 +1295,12 @@ function clearMobileSelection() {
 function updateMobileStats() {
   const currentMember = mobileFilteredMembers[mobileMemberIndex];
   if (!currentMember) return;
-  const counts = {};
-  CONFIG.stats.forEach(s => counts[s.countAs] = 0);
-  for (const key in scheduleData) {
-    if (key.startsWith(`${currentMember.id}-${year}-${month}-`)) {
-      const st = getStatus(scheduleData[key]);
-      if (st) {
-        const ca = st.countAs || (st.timeStart ? 'work' : 'leave');
-        if (counts[ca] !== undefined) counts[ca]++;
-      }
-    }
-  }
+  const counts = calculateMemberStats(currentMember.id);
   const statsDiv = document.querySelector('#mobileView > div:last-child');
   if (statsDiv) {
     statsDiv.innerHTML = CONFIG.stats
       .filter(s => counts[s.countAs] > 0)
-      .map(s => `<div class="flex items-center gap-1 text-xs"><span class="font-semibold px-1.5 py-0.5 rounded" style="background:${s.color}18;color:${s.color}">${s.label}${counts[s.countAs]}</span></div>`)
+      .map(s => `<div class="flex items-center gap-1 text-xs"><span class="font-semibold px-1.5 py-0.5 rounded" style="background:${s.color}18;color:${s.color}">${s.label}${formatStatCount(counts[s.countAs])}</span></div>`)
       .join('') || '<span class="text-slate-400 text-xs">暂无排班</span>';
   }
 }
@@ -1781,7 +1780,7 @@ function bindStatusesTab() {
 // ═══════════════════════════════════════════════
 //  EXPORT EXCEL
 // ═══════════════════════════════════════════════
-document.getElementById('exportBtn').addEventListener('click', exportExcel);
+// export handler moved to desktop table header link
 
 function hexToArgb(hex) {
   const h = hex.replace('#','');
@@ -1829,7 +1828,7 @@ function doExport() {
   members.forEach((m) => {
     const group = CONFIG.groups.find(g => g.id === m.groupId);
     const row = [m.name, m.uid || '', group?.name || ''];
-    const counts = { work: 0, duty: 0, rest: 0, leave: 0 };
+    const counts = calculateMemberStats(m.id);
     const ri = wsData.length;
 
     for (let d = 1; d <= days; d++) {
@@ -1844,8 +1843,6 @@ function doExport() {
           fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: hexToArgb(st.color) } },
           alignment: { horizontal: 'center', vertical: 'middle' }
         };
-        const ca = st.countAs || (st.timeStart ? 'work' : 'leave');
-        if (counts[ca] !== undefined) counts[ca]++;
       } else {
         cellStyles[`${ri},${ci}`] = {
           fill: isWeekend(year,month,d) ? { type:'pattern', pattern:'solid', fgColor:{ argb:'FFFEF2F2' } } : undefined,
