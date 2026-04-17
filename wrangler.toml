@@ -1,5 +1,6 @@
 name = "paiban-saas"
 compatibility_date = "2024-06-14"
+compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "public"
 
 # Pages project settings (used by wrangler pages deploy)
