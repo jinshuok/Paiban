@@ -81,9 +81,20 @@ function json(body, status = 200, extraHeaders = {}) {
 }
 
 function getTenantId(request, env) {
-  // 优先从请求头读取，支持固定域名部署和本地开发
+  // 优先从请求头读取
   const headerTenantId = request.headers.get('x-tenant-id')
   if (headerTenantId) return headerTenantId
+
+  // 从 pathname 读取（固定域名+子目录部署）
+  const url = new URL(request.url)
+  const pathname = url.pathname
+  const pathMatch = pathname.match(/^\/([a-zA-Z0-9-]+)(?:\/|$)/)
+  if (pathMatch) {
+    const possibleTenant = pathMatch[1]
+    if (possibleTenant !== 'api' && !possibleTenant.startsWith('superadmin')) {
+      return possibleTenant
+    }
+  }
 
   const host = request.headers.get('host') || ''
   const parts = host.split('.')

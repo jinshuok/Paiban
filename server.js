@@ -12,6 +12,20 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// ── Subdirectory tenant rewrite (fixed-domain deployment) ──
+app.use((req, res, next) => {
+  const pathMatch = req.path.match(/^\/([a-zA-Z0-9-]+)(?:\/|$)/);
+  if (pathMatch) {
+    const possibleTenant = pathMatch[1];
+    if (possibleTenant !== 'api' && !possibleTenant.startsWith('superadmin')) {
+      req.tenantId = possibleTenant;
+      req.url = req.url.replace(/^\/[a-zA-Z0-9-]+/, '') || '/';
+    }
+  }
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Session ──
@@ -293,10 +307,15 @@ function genId(prefix) {
 
 // ── Tenant resolution ──
 function resolveTenant(req, res, next) {
-  // 优先从请求头读取，支持固定域名部署和本地开发
+  // 优先从请求头读取
   const headerTenantId = req.headers['x-tenant-id'];
   if (headerTenantId) {
     req.tenantId = headerTenantId;
+    return next();
+  }
+
+  // 子目录方式已由前置中间件解析
+  if (req.tenantId) {
     return next();
   }
 

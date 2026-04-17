@@ -113,6 +113,16 @@ let currentGroupId = null;
 //  TENANT / API HELPERS
 // ═══════════════════════════════════════════════
 function getTenantId() {
+  // 优先从 pathname 读取（支持固定域名+子目录部署）
+  const path = window.location.pathname;
+  const pathMatch = path.match(/^\/([a-zA-Z0-9-]+)(?:\/|$)/);
+  if (pathMatch) {
+    const possibleTenant = pathMatch[1];
+    if (possibleTenant !== 'api' && !possibleTenant.startsWith('superadmin')) {
+      return possibleTenant;
+    }
+  }
+
   const host = window.location.hostname;
   if (host.includes('localhost') || host.includes('127.0.0.1')) {
     return localStorage.getItem('tenantId') || 'default';
@@ -321,6 +331,12 @@ async function submitAuth() {
       currentGroupId = data.tenantId;
       currentTenantName = data.tenantName || data.tenantId;
       localStorage.setItem('tenantId', data.tenantId);
+      // 固定域名部署：新注册组织后跳转到子目录路径
+      const isSubdomain = window.location.hostname.split('.').length >= 3 && !window.location.hostname.includes('localhost');
+      if (!isSubdomain && !window.location.pathname.startsWith(`/${data.tenantId}`)) {
+        window.location.href = `/${data.tenantId}`;
+        return;
+      }
       hideAuthScreen();
       loadConfig(); loadData();
     } else {
@@ -405,6 +421,12 @@ async function submitAuth() {
     if (myGroups.length > 1) {
       showGroupSelector(myGroups, data.defaultGroupId);
     } else {
+      // 固定域名部署：单组织登录后跳转到子目录路径
+      const isSubdomain = window.location.hostname.split('.').length >= 3 && !window.location.hostname.includes('localhost');
+      if (!isSubdomain && !window.location.pathname.startsWith(`/${data.defaultGroupId}`)) {
+        window.location.href = `/${data.defaultGroupId}`;
+        return;
+      }
       hideAuthScreen();
       loadConfig(); loadData();
     }
@@ -465,6 +487,12 @@ async function selectGroup(groupId) {
     const group = myGroups.find(g => g.id === groupId);
     currentTenantName = group?.name || groupId;
     localStorage.setItem('tenantId', groupId);
+    // 固定域名部署：切换组织后跳转到对应子目录路径
+    const isSubdomain = window.location.hostname.split('.').length >= 3 && !window.location.hostname.includes('localhost');
+    if (!isSubdomain && !window.location.pathname.startsWith(`/${groupId}`)) {
+      window.location.href = `/${groupId}`;
+      return;
+    }
     document.getElementById('groupSelectorModal')?.classList.add('hidden');
     hideAuthScreen();
     loadConfig(); loadData();
