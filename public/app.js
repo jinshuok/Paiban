@@ -132,34 +132,13 @@ function getTenantId() {
   return 'default';
 }
 
-function getBaseDomain() {
-  const host = window.location.hostname;
-  if (host.includes('localhost') || host.includes('127.0.0.1')) return host;
-  const parts = host.split('.');
-  if (parts.length >= 3) {
-    return parts.slice(1).join('.');
-  }
-  return host;
-}
-
-function isSubdomainDeployment() {
-  const host = window.location.hostname;
-  if (host.includes('localhost') || host.includes('127.0.0.1')) return false;
-  const parts = host.split('.');
-  return parts.length >= 3;
-}
-
 function navigateToTenant(tenantId) {
   if (!tenantId || tenantId === 'default') {
     window.location.href = '/';
     return;
   }
-  if (isSubdomainDeployment()) {
-    const base = getBaseDomain();
-    window.location.href = `https://${tenantId}.${base}/`;
-  } else {
-    window.location.href = `/${tenantId}`;
-  }
+  // 当前项目未配置子域名 DNS，统一使用子目录方式跳转
+  window.location.href = `/${tenantId}`;
 }
 
 function apiHeaders(extra = {}) {
