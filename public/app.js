@@ -268,6 +268,7 @@ function updateHeaderUI() {
   const userLabel = document.getElementById('userProfileLabel');
   userLabel.textContent = currentUsername || '我';
 }
+function updateAuthUI() {
   const memberForm = document.getElementById('memberAuthForm');
   const createForm = document.getElementById('createOrgForm');
   const saForm = document.getElementById('superAdminForm');
@@ -763,7 +764,8 @@ function renderTable() {
     const group = CONFIG.groups.find(g => g.id === m.groupId);
     const row = document.createElement('div');
     row.className = 'flex items-stretch border-b border-slate-200 hover:bg-slate-50/60' + (m.uid === currentUsername ? ' bg-blue-50' : '');
-    row.appendChild(row);
+
+    const nc = document.createElement('div');
     nc.className = 'w-40 min-w-[160px] shrink-0 px-3 flex items-center gap-2 bg-white border-r border-slate-200 stickyleft hover:bg-slate-50/60';
     nc.innerHTML = `
       <div class="w-7 h-7 rounded-full text-white flex items-center justify-center text-xs font-semibold shrink-0" style="background:${memberColor(mIdx)}">${m.name[0]}</div>
@@ -1700,6 +1702,7 @@ ScheduleAPI.getDaySchedule("2026-04-16")</code></pre>
       </div>
     </div>`;
 }
+function renderStatusesTab() {
   return `
     <table class="w-full text-sm border-collapse" id="statusesTable">
       <thead>
@@ -1741,6 +1744,7 @@ ScheduleAPI.getDaySchedule("2026-04-16")</code></pre>
 function bindDevDocTab() {
   document.getElementById('devDocRefreshKey')?.addEventListener('click', refreshDevDocApiKey);
 }
+function bindStatusesTab() {
   function syncStatuses() {
     document.querySelectorAll('#statusesTable tbody tr').forEach((tr, i) => {
       if (!editStatuses[i]) return;
