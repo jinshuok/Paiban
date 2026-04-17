@@ -340,6 +340,25 @@ export async function onRequest(context) {
     }
   }
 
+  if (pathname === '/api/superadmin/login' && method === 'POST') {
+    const body = await request.json().catch(() => ({}))
+    const { username, password } = body
+    if (!username || !password) return json({ error: '用户名和密码必填' }, 400)
+
+    const superAdmin = await db.prepare('SELECT * FROM super_admins WHERE username = ?').bind(username).first()
+    if (!superAdmin || !verifyPassword(password, superAdmin.password_hash)) {
+      return json({ error: '用户名或密码错误' }, 401)
+    }
+
+    const token = genSessionToken()
+    const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000).toISOString()
+    await db.prepare('INSERT INTO sessions (token, tenant_id, username, role, expires_at) VALUES (?, ?, ?, ?, ?)')
+      .bind(token, '__system', username, 'superadmin', expiresAt).run()
+    return json({ ok: true, username, role: 'superadmin', mustChangePassword: superAdmin.must_change_password === 1 }, 200, {
+      'Set-Cookie': cookieHeader(token, secure)
+    })
+  }
+
   // ── Super Admin routes ──
   const isSuperAdminRoute = pathname.startsWith('/api/superadmin/')
   if (isSuperAdminRoute) {
