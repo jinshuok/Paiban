@@ -225,10 +225,10 @@ async function loadConfig() {
     else { showToast('读取配置失败，使用默认数据'); CONFIG = JSON.parse(JSON.stringify(DEFAULT_CONFIG)); }
   } catch (e) {
     showToast('网络异常，使用离线缓存');
-    const raw = localStorage.getItem('sched_config');
+    const raw = localStorage.getItem('sched_config_v2');
     CONFIG = raw ? JSON.parse(raw) : JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   }
-  try { localStorage.setItem('sched_config', JSON.stringify(CONFIG)); } catch(e){}
+  try { localStorage.setItem('sched_config_v2', JSON.stringify(CONFIG)); } catch(e){}
   configLoaded = true;
   maybeInit();
 }
@@ -237,7 +237,7 @@ async function saveConfig() {
   try {
     const res = await fetch('/api/config', { method: 'POST', headers: apiHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(CONFIG) });
     if (!res.ok) showToast('保存配置失败');
-    else localStorage.setItem('sched_config', JSON.stringify(CONFIG));
+    else localStorage.setItem('sched_config_v2', JSON.stringify(CONFIG));
   } catch (e) { showToast('保存配置失败（离线模式）'); }
 }
 

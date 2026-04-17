@@ -235,7 +235,7 @@ function getConfig(tenantId) {
   if (!row) {
     db.prepare("INSERT OR REPLACE INTO config (tenant_id, key, value) VALUES (?, 'app_config', ?)")
       .run(tenantId, JSON.stringify(DEFAULT_CONFIG));
-    return DEFAULT_CONFIG;
+    return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   }
   return JSON.parse(row.value);
 }
