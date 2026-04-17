@@ -3,22 +3,22 @@
 // ═══════════════════════════════════════════════
 const DEFAULT_CONFIG = {
   groups: [
-    { id: 'g1', name: '产品-*科' },
-    { id: 'g2', name: '产品-*管' },
-    { id: 'g3', name: '产品-*管' },
-    { id: 'g4', name: '测试&*营' },
+    { id: 'g1', name: '销售部' },
+    { id: 'g2', name: '设计部' },
+    { id: 'g3', name: '技术部' },
+    { id: 'g4', name: '人事部' },
   ],
   members: [
-    { id: 'm1',  name: '李*凤', uid: 'lirifeng', groupId: 'g1' },
-    { id: 'm2',  name: '曹*',   uid: 'caoming', groupId: 'g1' },
-    { id: 'm3',  name: '钟*秋', uid: 'zhongguiqiu', groupId: 'g1' },
-    { id: 'm4',  name: '何*灵', uid: 'heyueling', groupId: 'g2' },
-    { id: 'm5',  name: '曾*梅', uid: 'zengjinmei', groupId: 'g2' },
-    { id: 'm6',  name: '苏*旋', uid: 'suyunxuan', groupId: 'g3' },
-    { id: 'm7',  name: '邓*广', uid: 'dengdaguang', groupId: 'g3' },
-    { id: 'm8',  name: '陈*梅', uid: 'chenqingmei', groupId: 'g4' },
-    { id: 'm9',  name: '廖*凤', uid: 'liaomeifeng', groupId: 'g4' },
-    { id: 'm10', name: '吴*茹', uid: 'wuhuiru', groupId: 'g4' },
+    { id: 'm1',  name: '张三', uid: 'zhangsan', groupId: 'g1' },
+    { id: 'm2',  name: '李四', uid: 'lisi', groupId: 'g1' },
+    { id: 'm3',  name: '王五', uid: 'wangwu', groupId: 'g1' },
+    { id: 'm4',  name: '赵六', uid: 'zhaoliu', groupId: 'g2' },
+    { id: 'm5',  name: '孙七', uid: 'sunqi', groupId: 'g2' },
+    { id: 'm6',  name: '周八', uid: 'zhouba', groupId: 'g3' },
+    { id: 'm7',  name: '吴九', uid: 'wujiu', groupId: 'g3' },
+    { id: 'm8',  name: '郑十', uid: 'zhengshi', groupId: 'g4' },
+    { id: 'm9',  name: '钱十一', uid: 'qianshiyi', groupId: 'g4' },
+    { id: 'm10', name: '冯十二', uid: 'fengshier', groupId: 'g4' },
   ],
   statuses: [
     { id: 'work',   label: '正常班', short: '班', color: '#2563eb', timeStart: '09:00', timeEnd: '18:00', inCycle: true  },
@@ -1181,7 +1181,7 @@ function renderStatusesTab() {
             <td class="py-1.5 px-2"><input class="s-ts w-full text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500 font-mono" value="${s.timeStart||''}" placeholder="09:00"></td>
             <td class="py-1.5 px-2"><input class="s-te w-full text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500 font-mono" value="${s.timeEnd||''}" placeholder="18:00"></td>
             <td class="py-1.5 px-2">
-              <label class="w-7 h-7 rounded-md border-2 border-slate-200 block overflow-hidden cursor-pointer" style="background:${s.color}">
+              <label class="w-7 h-7 rounded-md block overflow-hidden cursor-pointer" style="background:${s.color}">
                 <input type="color" class="s-color w-[200%] h-[200%] -m-1/4 border-0 p-0 cursor-pointer" value="${s.color}">
               </label>
             </td>
