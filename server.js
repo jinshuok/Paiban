@@ -185,6 +185,39 @@ const DEFAULT_CONFIG = {
   ],
 };
 
+const OLD_NAME_MAP = {
+  '李日凤': '张三', '曹铭': '李四', '钟贵秋': '王五', '何粤灵': '赵六', '曾金梅': '孙七',
+  '苏允旋': '周八', '邓大广': '吴九', '陈清梅': '郑十', '廖美凤': '钱十一', '吴慧茹': '冯十二',
+  '李*凤': '张三', '曹*': '李四', '钟*秋': '王五', '何*灵': '赵六', '曾*梅': '孙七',
+  '苏*旋': '周八', '邓*广': '吴九', '陈*梅': '郑十', '廖*凤': '钱十一', '吴*茹': '冯十二',
+};
+
+const OLD_UID_MAP = {
+  'lirifeng': 'zhangsan', 'caoming': 'lisi', 'zhongguiqiu': 'wangwu', 'heyueling': 'zhaoliu', 'zengjinmei': 'sunqi',
+  'suyunxuan': 'zhouba', 'dengdaguang': 'wujiu', 'chenqingmei': 'zhengshi', 'liaomeifeng': 'qianshiyi', 'wuhuiru': 'fengshier',
+};
+
+const OLD_GROUP_MAP = {
+  '产品-数科': '销售部', '产品-供管': '设计部', '产品-销管': '技术部', '测试&运营': '人事部',
+  '产品-*科': '销售部', '产品-*管': '设计部', '测试&*营': '人事部',
+};
+
+function sanitizeConfig(cfg) {
+  let dirty = false;
+  if (cfg.members && Array.isArray(cfg.members)) {
+    for (const m of cfg.members) {
+      if (OLD_NAME_MAP[m.name]) { m.name = OLD_NAME_MAP[m.name]; dirty = true; }
+      if (OLD_UID_MAP[m.uid]) { m.uid = OLD_UID_MAP[m.uid]; dirty = true; }
+    }
+  }
+  if (cfg.groups && Array.isArray(cfg.groups)) {
+    for (const g of cfg.groups) {
+      if (OLD_GROUP_MAP[g.name]) { g.name = OLD_GROUP_MAP[g.name]; dirty = true; }
+    }
+  }
+  return dirty;
+}
+
 // ── Crypto ──
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -237,7 +270,11 @@ function getConfig(tenantId) {
       .run(tenantId, JSON.stringify(DEFAULT_CONFIG));
     return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   }
-  return JSON.parse(row.value);
+  const cfg = JSON.parse(row.value);
+  if (sanitizeConfig(cfg)) {
+    setConfig(tenantId, cfg);
+  }
+  return cfg;
 }
 
 function setConfig(tenantId, cfg) {

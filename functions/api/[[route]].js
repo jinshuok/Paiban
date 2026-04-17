@@ -40,6 +40,39 @@ const DEFAULT_CONFIG = {
 const COOKIE_NAME = 'session'
 const SESSION_DAYS = 7
 
+const OLD_NAME_MAP = {
+  '李日凤': '张三', '曹铭': '李四', '钟贵秋': '王五', '何粤灵': '赵六', '曾金梅': '孙七',
+  '苏允旋': '周八', '邓大广': '吴九', '陈清梅': '郑十', '廖美凤': '钱十一', '吴慧茹': '冯十二',
+  '李*凤': '张三', '曹*': '李四', '钟*秋': '王五', '何*灵': '赵六', '曾*梅': '孙七',
+  '苏*旋': '周八', '邓*广': '吴九', '陈*梅': '郑十', '廖*凤': '钱十一', '吴*茹': '冯十二',
+}
+
+const OLD_UID_MAP = {
+  'lirifeng': 'zhangsan', 'caoming': 'lisi', 'zhongguiqiu': 'wangwu', 'heyueling': 'zhaoliu', 'zengjinmei': 'sunqi',
+  'suyunxuan': 'zhouba', 'dengdaguang': 'wujiu', 'chenqingmei': 'zhengshi', 'liaomeifeng': 'qianshiyi', 'wuhuiru': 'fengshier',
+}
+
+const OLD_GROUP_MAP = {
+  '产品-数科': '销售部', '产品-供管': '设计部', '产品-销管': '技术部', '测试&运营': '人事部',
+  '产品-*科': '销售部', '产品-*管': '设计部', '测试&*营': '人事部',
+}
+
+function sanitizeConfig(cfg) {
+  let dirty = false
+  if (cfg.members && Array.isArray(cfg.members)) {
+    for (const m of cfg.members) {
+      if (OLD_NAME_MAP[m.name]) { m.name = OLD_NAME_MAP[m.name]; dirty = true }
+      if (OLD_UID_MAP[m.uid]) { m.uid = OLD_UID_MAP[m.uid]; dirty = true }
+    }
+  }
+  if (cfg.groups && Array.isArray(cfg.groups)) {
+    for (const g of cfg.groups) {
+      if (OLD_GROUP_MAP[g.name]) { g.name = OLD_GROUP_MAP[g.name]; dirty = true }
+    }
+  }
+  return dirty
+}
+
 function json(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
@@ -238,14 +271,15 @@ export async function onRequest(context) {
         .bind(tenantId, username, hashPassword(password)).run()
 
       const cfgRow = await db.prepare('SELECT value FROM tenant_configs WHERE tenant_id = ?').bind(tenantId).first()
-      const cfg = cfgRow ? JSON.parse(cfgRow.value) : DEFAULT_CONFIG
+      const cfg = cfgRow ? JSON.parse(cfgRow.value) : JSON.parse(JSON.stringify(DEFAULT_CONFIG))
+      sanitizeConfig(cfg)
       const exists = cfg.members.find(m => m.uid === username)
       if (!exists) {
         const gid = cfg.groups[0]?.id || ''
         cfg.members.push({ id: genId('m'), name: username, uid: username, groupId: gid })
-        await db.prepare('INSERT OR REPLACE INTO tenant_configs (tenant_id, value) VALUES (?, ?)')
-          .bind(tenantId, JSON.stringify(cfg)).run()
       }
+      await db.prepare('INSERT OR REPLACE INTO tenant_configs (tenant_id, value) VALUES (?, ?)')
+        .bind(tenantId, JSON.stringify(cfg)).run()
 
       const token = genSessionToken()
       const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000).toISOString()
@@ -286,7 +320,13 @@ export async function onRequest(context) {
 
   if (pathname === '/api/config' && method === 'GET') {
     const row = await db.prepare('SELECT value FROM tenant_configs WHERE tenant_id = ?').bind(tenantId).first()
-    return json(row ? JSON.parse(row.value) : DEFAULT_CONFIG)
+    const cfg = row ? JSON.parse(row.value) : JSON.parse(JSON.stringify(DEFAULT_CONFIG))
+    const dirty = sanitizeConfig(cfg)
+    if (dirty) {
+      await db.prepare('INSERT OR REPLACE INTO tenant_configs (tenant_id, value) VALUES (?, ?)')
+        .bind(tenantId, JSON.stringify(cfg)).run()
+    }
+    return json(cfg)
   }
 
   if (pathname === '/api/config' && method === 'POST') {
