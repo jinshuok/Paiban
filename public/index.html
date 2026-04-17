@@ -28,6 +28,40 @@
 </head>
 <body class="bg-slate-50 text-slate-800 h-screen flex flex-col overflow-hidden">
 
+<!-- Auth Screen (frosted glass) -->
+<div id="authScreen" class="hidden fixed inset-0 z-[500] flex items-center justify-center bg-slate-50/80 backdrop-blur-md">
+  <div class="bg-white rounded-2xl shadow-2xl p-8 w-[400px] max-w-[90vw]">
+    <div class="text-center mb-6">
+      <div class="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-xl mx-auto mb-3">班</div>
+      <h1 class="text-xl font-bold text-slate-800">排班大师</h1>
+      <div id="authTenantBadge" class="text-sm text-slate-500 mt-1 font-mono">default</div>
+    </div>
+
+    <div class="flex bg-slate-100 rounded-lg p-1 mb-5">
+      <button id="authModeLogin" class="flex-1 py-1.5 rounded-md text-sm font-medium transition bg-white shadow-sm text-slate-800">登录</button>
+      <button id="authModeRegister" class="flex-1 py-1.5 rounded-md text-sm font-medium transition text-slate-500">注册</button>
+    </div>
+
+    <div id="adminRegHint" class="hidden text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-4">
+      您是第一位用户，注册后将自动成为管理员。
+    </div>
+
+    <label class="block text-sm font-medium text-slate-600 mb-1">用户名</label>
+    <input id="authUsername" type="text" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 mb-4" placeholder="请输入用户名">
+
+    <label class="block text-sm font-medium text-slate-600 mb-1">密码</label>
+    <input id="authPassword" type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 mb-2" placeholder="请输入密码">
+
+    <div id="authConfirmWrap" class="hidden mt-3">
+      <label class="block text-sm font-medium text-slate-600 mb-1">确认密码</label>
+      <input id="authConfirmPassword" type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500" placeholder="再次输入密码">
+    </div>
+
+    <div id="authError" class="text-xs text-red-500 mt-3 hidden"></div>
+    <button id="authSubmitBtn" class="w-full h-10 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition mt-5">登录</button>
+  </div>
+</div>
+
 <!-- Header -->
 <header class="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-3 shrink-0 z-30">
   <div class="flex items-center gap-2">
@@ -54,6 +88,14 @@
     <button id="settingsBtn" class="h-8 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-medium text-slate-600 transition flex items-center gap-1">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
       <span class="hidden sm:inline">设置</span>
+    </button>
+    <button id="logoutBtn" class="h-8 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-medium text-slate-600 transition hidden sm:flex items-center gap-1">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+      <span>退出</span>
+    </button>
+    <button id="devDocBtn" class="h-8 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-medium text-slate-600 transition hidden items-center gap-1">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      <span class="hidden sm:inline">开发文档</span>
     </button>
     <button id="exportBtn" class="h-8 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition flex items-center gap-1">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
@@ -125,6 +167,58 @@
     <div class="px-5 py-3 border-t border-slate-100 flex justify-end gap-2">
       <button id="modalCancel" class="h-9 px-4 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-medium text-slate-600 transition">取消</button>
       <button id="modalSave" class="h-9 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">保存设置</button>
+    </div>
+  </div>
+</div>
+
+<!-- DevDoc Modal -->
+<div id="devDocModal" class="hidden fixed inset-0 bg-black/40 z-[400] items-center justify-center">
+  <div class="bg-white rounded-2xl shadow-2xl w-[800px] max-w-[95vw] max-h-[85vh] flex flex-col">
+    <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+      <span class="font-semibold text-slate-800 text-base">开发文档</span>
+      <button id="devDocClose" class="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center text-sm transition">✕</button>
+    </div>
+    <div class="flex-1 overflow-y-auto p-5 text-sm text-slate-700 space-y-5">
+      <div>
+        <h3 class="font-semibold text-slate-800 mb-2">API 基础信息</h3>
+        <p>所有数据接口需要在登录态下访问。本地开发时通过请求头 <code class="bg-slate-100 px-1 rounded">X-Tenant-Id</code> 指定租户；线上通过子域名自动识别。</p>
+      </div>
+      <div>
+        <h3 class="font-semibold text-slate-800 mb-2">1. 获取当前身份</h3>
+        <pre class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto"><code>GET /api/auth/me</code></pre>
+      </div>
+      <div>
+        <h3 class="font-semibold text-slate-800 mb-2">2. 获取配置（成员、状态）</h3>
+        <pre class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto"><code>GET /api/config</code></pre>
+      </div>
+      <div>
+        <h3 class="font-semibold text-slate-800 mb-2">3. 获取某月排班</h3>
+        <pre class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto"><code>GET /api/schedule/{year}/{month}</code></pre>
+      </div>
+      <div>
+        <h3 class="font-semibold text-slate-800 mb-2">4. 保存排班数据</h3>
+        <pre class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto"><code>POST /api/schedule/{year}/{month}
+Content-Type: application/json
+
+{
+  "m1-2026-4-16": "duty",
+  "m2-2026-4-16": "rest"
+}</code></pre>
+      </div>
+      <div>
+        <h3 class="font-semibold text-slate-800 mb-2">5. ScheduleAPI（页面内全局对象）</h3>
+        <pre class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto"><code>// 获取所有成员
+ScheduleAPI.getMembers()
+
+// 根据账号ID获取成员
+ScheduleAPI.getMemberByUid("caoming")
+
+// 获取某人某日排班
+ScheduleAPI.getScheduleByDate("m1", "2026-04-16")
+
+// 获取某天所有人排班
+ScheduleAPI.getDaySchedule("2026-04-16")</code></pre>
+      </div>
     </div>
   </div>
 </div>

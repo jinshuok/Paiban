@@ -99,11 +99,128 @@ function showTenantBadge() {
 }
 
 // ═══════════════════════════════════════════════
+//  AUTH
+// ═══════════════════════════════════════════════
+let currentUserRole = null;
+let authMode = 'login'; // 'login' | 'register'
+let authHasAdmin = false;
+
+async function checkAuth() {
+  try {
+    const res = await fetch('/api/auth/me', { headers: apiHeaders() });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (data.authenticated) currentUserRole = data.role;
+    return data.authenticated;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function fetchAuthStatus() {
+  try {
+    const res = await fetch('/api/auth/status', { headers: apiHeaders() });
+    if (!res.ok) return { tenantId: getTenantId(), hasTenant: false, hasAdmin: false };
+    return res.json();
+  } catch (e) {
+    return { tenantId: getTenantId(), hasTenant: false, hasAdmin: false };
+  }
+}
+
+function showAuthScreen() {
+  const screen = document.getElementById('authScreen');
+  if (screen) screen.classList.remove('hidden');
+  document.getElementById('logoutBtn')?.classList.add('hidden');
+  document.getElementById('devDocBtn')?.classList.add('hidden');
+  updateAuthUI();
+}
+
+function hideAuthScreen() {
+  const screen = document.getElementById('authScreen');
+  if (screen) screen.classList.add('hidden');
+  document.getElementById('logoutBtn')?.classList.remove('hidden');
+  if (currentUserRole === 'admin') {
+    const btn = document.getElementById('devDocBtn');
+    btn?.classList.remove('hidden');
+    btn?.classList.add('flex');
+  }
+}
+
+function updateAuthUI() {
+  const loginBtn = document.getElementById('authModeLogin');
+  const regBtn = document.getElementById('authModeRegister');
+  const confirmWrap = document.getElementById('authConfirmWrap');
+  const adminHint = document.getElementById('adminRegHint');
+  const submitBtn = document.getElementById('authSubmitBtn');
+
+  if (authMode === 'login') {
+    loginBtn?.classList.add('bg-white', 'shadow-sm', 'text-slate-800');
+    loginBtn?.classList.remove('text-slate-500');
+    regBtn?.classList.remove('bg-white', 'shadow-sm', 'text-slate-800');
+    regBtn?.classList.add('text-slate-500');
+    confirmWrap?.classList.add('hidden');
+    adminHint?.classList.add('hidden');
+    if (submitBtn) submitBtn.textContent = '登录';
+  } else {
+    regBtn?.classList.add('bg-white', 'shadow-sm', 'text-slate-800');
+    regBtn?.classList.remove('text-slate-500');
+    loginBtn?.classList.remove('bg-white', 'shadow-sm', 'text-slate-800');
+    loginBtn?.classList.add('text-slate-500');
+    confirmWrap?.classList.remove('hidden');
+    if (!authHasAdmin) adminHint?.classList.remove('hidden');
+    else adminHint?.classList.add('hidden');
+    if (submitBtn) submitBtn.textContent = authHasAdmin ? '注册成员账号' : '注册管理员';
+  }
+}
+
+async function submitAuth() {
+  const username = document.getElementById('authUsername').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const confirm = document.getElementById('authConfirmPassword').value;
+  const errorEl = document.getElementById('authError');
+
+  if (!username || !password) {
+    errorEl.textContent = '请输入用户名和密码';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+  if (authMode === 'register' && password !== confirm) {
+    errorEl.textContent = '两次输入的密码不一致';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  errorEl.classList.add('hidden');
+  const url = authMode === 'login'
+    ? '/api/auth/login'
+    : (authHasAdmin ? '/api/auth/register-member' : '/api/auth/register-admin');
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: apiHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ username, password })
+  });
+
+  if (res.ok) {
+    const data = await res.json();
+    currentUserRole = data.role;
+    hideAuthScreen();
+    configLoaded = false; dataLoaded = false;
+    loadConfig(); loadData();
+  } else {
+    const data = await res.json().catch(() => ({}));
+    errorEl.textContent = data.error || '操作失败';
+    errorEl.classList.remove('hidden');
+  }
+}
+
+// ═══════════════════════════════════════════════
 //  API / PERSISTENCE
 // ═══════════════════════════════════════════════
 async function loadConfig() {
   try {
     const res = await fetch('/api/config', { headers: apiHeaders() });
+    if (res.status === 401) { showAuthScreen(); return; }
     if (res.ok) CONFIG = await res.json();
     else { showToast('读取配置失败，使用默认数据'); CONFIG = JSON.parse(JSON.stringify(DEFAULT_CONFIG)); }
   } catch (e) {
@@ -129,6 +246,7 @@ function storageKey() { return `sched_${year}_${month}`; }
 async function loadData() {
   try {
     const res = await fetch(`/api/schedule/${year}/${month}`, { headers: apiHeaders() });
+    if (res.status === 401) { showAuthScreen(); return; }
     if (res.ok) scheduleData = await res.json();
     else { showToast('读取排班失败'); scheduleData = {}; }
   } catch (e) {
@@ -897,7 +1015,7 @@ function showToast(msg) {
 // ═══════════════════════════════════════════════
 //  SETTINGS MODAL
 // ═══════════════════════════════════════════════
-document.getElementById('settingsBtn').addEventListener('click', openSettings);
+// settingsBtn click handler moved to end of file with admin guard
 document.getElementById('modalClose').addEventListener('click', closeSettings);
 document.getElementById('modalCancel').addEventListener('click', closeSettings);
 document.getElementById('modalSave').addEventListener('click', saveSettings);
@@ -967,7 +1085,7 @@ function renderMembersTab() {
           <th class="text-left py-2 px-2" style="width:100px">姓名</th>
           <th class="text-left py-2 px-2" style="width:110px">账号 ID</th>
           <th class="text-left py-2 px-2" style="width:140px">部门-团队</th>
-          <th class="py-2 px-2" style="width:40px"></th>
+          <th class="py-2 px-2 text-center" style="width:90px">操作</th>
         </tr>
       </thead>
       <tbody>
@@ -979,6 +1097,9 @@ function renderMembersTab() {
               <select class="m-group w-full text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500 bg-white">${editGroups.map(g=>`<option value="${g.id}"${g.id===m.groupId?' selected':''}>${g.name}</option>`).join('')}</select>
             </td>
             <td class="py-1.5 px-2 text-center">
+              <button class="reset-pwd-member w-7 h-7 rounded-md border border-slate-200 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 text-slate-400 flex items-center justify-center transition mr-1" title="重置密码">
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+              </button>
               <button class="del-member w-7 h-7 rounded-md border border-slate-200 hover:bg-red-50 hover:text-red-500 hover:border-red-200 text-slate-400 flex items-center justify-center transition" title="删除">
                 <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
               </button>
@@ -1012,6 +1133,24 @@ function bindMembersTab() {
   document.querySelectorAll('#membersTable .m-name, #membersTable .m-uid, #membersTable .m-group').forEach(el => {
     el.addEventListener('input', syncMembers);
     el.addEventListener('change', syncMembers);
+  });
+  document.querySelectorAll('.reset-pwd-member').forEach((btn, i) => {
+    btn.addEventListener('click', async () => {
+      const m = editMembers[i];
+      const newPwd = prompt(`重置成员 "${m.name}" (${m.uid}) 的登录密码：`);
+      if (!newPwd) return;
+      try {
+        const res = await fetch('/api/admin/reset-password', {
+          method: 'POST',
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ username: m.uid, newPassword: newPwd })
+        });
+        if (res.ok) showToast('密码已重置 ✓');
+        else { const d = await res.json().catch(() => ({})); showToast(d.error || '重置失败'); }
+      } catch (e) {
+        showToast('网络错误');
+      }
+    });
   });
   document.querySelectorAll('.del-member').forEach((btn, i) => {
     btn.addEventListener('click', () => { syncMembers(); editMembers.splice(i, 1); renderModalTab(); });
@@ -1251,5 +1390,74 @@ window.ScheduleAPI = ScheduleAPI;
 // ═══════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════
-loadConfig();
-loadData();
+(async function init() {
+  // 先渲染默认数据作为毛玻璃背景
+  CONFIG = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+  render();
+
+  const status = await fetchAuthStatus();
+  authHasAdmin = status.hasAdmin;
+  const badge = document.getElementById('authTenantBadge');
+  if (badge) badge.textContent = status.tenantId;
+
+  const authed = await checkAuth();
+  if (!authed) {
+    authMode = authHasAdmin ? 'login' : 'register';
+    showAuthScreen();
+    return;
+  }
+  hideAuthScreen();
+  loadConfig();
+  loadData();
+})();
+
+// Auth UI events
+document.getElementById('authModeLogin')?.addEventListener('click', () => {
+  authMode = 'login';
+  updateAuthUI();
+});
+document.getElementById('authModeRegister')?.addEventListener('click', () => {
+  authMode = 'register';
+  updateAuthUI();
+});
+document.getElementById('authSubmitBtn')?.addEventListener('click', submitAuth);
+document.getElementById('authPassword')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitAuth();
+});
+document.getElementById('authConfirmPassword')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitAuth();
+});
+
+document.getElementById('logoutBtn')?.addEventListener('click', async () => {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST', headers: apiHeaders() });
+  } catch (e) {}
+  currentUserRole = null;
+  authMode = 'login';
+  showAuthScreen();
+});
+
+// DevDoc
+document.getElementById('devDocBtn')?.addEventListener('click', () => {
+  document.getElementById('devDocModal')?.classList.remove('hidden');
+  document.getElementById('devDocModal')?.classList.add('flex');
+});
+document.getElementById('devDocClose')?.addEventListener('click', () => {
+  document.getElementById('devDocModal')?.classList.add('hidden');
+  document.getElementById('devDocModal')?.classList.remove('flex');
+});
+document.getElementById('devDocModal')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('devDocModal')) {
+    document.getElementById('devDocModal')?.classList.add('hidden');
+    document.getElementById('devDocModal')?.classList.remove('flex');
+  }
+});
+
+// Settings guard
+document.getElementById('settingsBtn')?.addEventListener('click', () => {
+  if (currentUserRole !== 'admin') {
+    showToast('仅管理员可修改设置');
+    return;
+  }
+  openSettings();
+});
