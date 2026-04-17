@@ -99,11 +99,12 @@ async function initSchema(db) {
     `CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, domain TEXT UNIQUE, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS tenant_configs (tenant_id TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (tenant_id) REFERENCES tenants(id))`,
     `CREATE TABLE IF NOT EXISTS schedules (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, member_id TEXT NOT NULL, year INTEGER NOT NULL, month INTEGER NOT NULL, day INTEGER NOT NULL, status_id TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(tenant_id, member_id, year, month, day))`,
-    `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'member', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(tenant_id, username))`,
+    `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'member', is_creator INTEGER NOT NULL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, username TEXT NOT NULL, role TEXT NOT NULL, expires_at DATETIME NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS super_admins (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, must_change_password INTEGER NOT NULL DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE INDEX IF NOT EXISTS idx_schedules_tenant ON schedules(tenant_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_schedules_tenant_ym ON schedules(tenant_id, year, month)`
+    `CREATE INDEX IF NOT EXISTS idx_schedules_tenant_ym ON schedules(tenant_id, year, month)`,
+    `CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`
   ]
   for (const sql of stmts) {
     await db.prepare(sql).run()
@@ -146,15 +147,6 @@ function genSessionToken() {
   return crypto.randomBytes(32).toString('hex')
 }
 
-function genOrgId() {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
-  let id = ''
-  for (let i = 0; i < 8; i++) {
-    id += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return id
-}
-
 function parseCookies(request) {
   const cookie = request.headers.get('cookie') || ''
   const obj = {}
@@ -182,6 +174,17 @@ async function getSession(request, db) {
   return row || null
 }
 
+async function getUserGroups(db, username) {
+  const { results } = await db.prepare(`
+    SELECT DISTINCT u.tenant_id AS id, t.name, u.role
+    FROM users u
+    JOIN tenants t ON t.id = u.tenant_id
+    WHERE u.username = ?
+    ORDER BY u.created_at DESC
+  `).bind(username).all()
+  return results || []
+}
+
 export async function onRequest(context) {
   const { request, env } = context
   const url = new URL(request.url)
@@ -196,7 +199,6 @@ export async function onRequest(context) {
   }
 
   await initSchema(db)
-  await ensureTenant(db, tenantId)
 
   const session = await getSession(request, db)
 
@@ -208,12 +210,17 @@ export async function onRequest(context) {
 
   if (pathname === '/api/auth/status' && method === 'GET') {
     const tenant = await db.prepare('SELECT * FROM tenants WHERE id = ?').bind(tenantId).first()
-    const hasAdmin = !!(await db.prepare("SELECT 1 FROM users WHERE tenant_id = ? AND role = 'admin' LIMIT 1").bind(tenantId).first())
+    const hasAdmin = tenant
+      ? !!(await db.prepare("SELECT 1 FROM users WHERE tenant_id = ? AND role = 'admin' LIMIT 1").bind(tenantId).first())
+      : false
     return json({ tenantId, tenantName: tenant?.name || tenantId, hasTenant: !!tenant, hasAdmin })
   }
 
   if (pathname === '/api/auth/me' && method === 'GET') {
     const isSuperAdmin = !!(session && session.role === 'superadmin')
+    const groups = (session && !isSuperAdmin && session.username)
+      ? await getUserGroups(db, session.username)
+      : []
     return json({
       tenantId,
       authenticated: !!(session && (session.tenant_id === tenantId || isSuperAdmin)),
@@ -221,36 +228,55 @@ export async function onRequest(context) {
       role: session?.role || null,
       isSuperAdmin,
       mustChangePassword: isSuperAdmin ? (session?.mustChangePassword || false) : false,
+      currentGroupId: session?.tenant_id || null,
+      groups,
     })
   }
 
   if (pathname === '/api/auth/login' && method === 'POST') {
     const body = await request.json().catch(() => ({}))
-    const { username, password } = body
-    if (!username || !password) return json({ error: '用户名和密码必填' }, 400)
+    const { phone, password } = body
+    if (!phone || !password) return json({ error: '手机号和密码必填' }, 400)
+    if (!/^\d{7,11}$/.test(phone)) return json({ error: '手机号必须是7-11位数字' }, 400)
 
-    const superAdmin = await db.prepare('SELECT * FROM super_admins WHERE username = ?').bind(username).first()
+    // Check super admin first
+    const superAdmin = await db.prepare('SELECT * FROM super_admins WHERE username = ?').bind(phone).first()
     if (superAdmin && verifyPassword(password, superAdmin.password_hash)) {
       const token = genSessionToken()
       const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000).toISOString()
       await db.prepare('INSERT INTO sessions (token, tenant_id, username, role, expires_at) VALUES (?, ?, ?, ?, ?)')
-        .bind(token, '__system', username, 'superadmin', expiresAt).run()
-      return json({ ok: true, tenantId: '__system', username, role: 'superadmin', isSuperAdmin: true, mustChangePassword: superAdmin.must_change_password === 1 }, 200, {
+        .bind(token, '__system', phone, 'superadmin', expiresAt).run()
+      return json({ ok: true, tenantId: '__system', username: phone, role: 'superadmin', isSuperAdmin: true, mustChangePassword: superAdmin.must_change_password === 1 }, 200, {
         'Set-Cookie': cookieHeader(token, secure)
       })
     }
 
-    const user = await db.prepare('SELECT * FROM users WHERE tenant_id = ? AND username = ?').bind(tenantId, username).first()
-    if (!user || !verifyPassword(password, user.password_hash)) {
-      return json({ error: '用户名或密码错误' }, 401)
+    // Find all users with this phone across groups
+    const { results: userRows } = await db.prepare('SELECT * FROM users WHERE username = ?').bind(phone).all()
+    if (!userRows || userRows.length === 0) {
+      return json({ error: '手机号或密码错误' }, 401)
     }
+
+    let matchedUser = null
+    for (const u of userRows) {
+      if (verifyPassword(password, u.password_hash)) {
+        matchedUser = u
+        break
+      }
+    }
+    if (!matchedUser) {
+      return json({ error: '手机号或密码错误' }, 401)
+    }
+
+    const groups = await getUserGroups(db, phone)
+    const defaultGroupId = matchedUser.tenant_id
 
     const token = genSessionToken()
     const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000).toISOString()
     await db.prepare('INSERT INTO sessions (token, tenant_id, username, role, expires_at) VALUES (?, ?, ?, ?, ?)')
-      .bind(token, tenantId, username, user.role, expiresAt).run()
+      .bind(token, defaultGroupId, phone, matchedUser.role, expiresAt).run()
 
-    return json({ ok: true, tenantId, username, role: user.role, isSuperAdmin: false, mustChangePassword: false }, 200, {
+    return json({ ok: true, username: phone, role: matchedUser.role, isSuperAdmin: false, mustChangePassword: false, groups, defaultGroupId }, 200, {
       'Set-Cookie': cookieHeader(token, secure)
     })
   }
@@ -266,36 +292,32 @@ export async function onRequest(context) {
 
   if (pathname === '/api/auth/register-admin' && method === 'POST') {
     const body = await request.json().catch(() => ({}))
-    const { orgName, username, password } = body
-    if (!orgName || !username || !password) return json({ error: '组织名称、用户名和密码必填' }, 400)
+    const { orgName, orgId, adminPhone, password } = body
+    if (!orgName || !orgId || !adminPhone || !password) return json({ error: '所有字段必填' }, 400)
+    if (!/^[a-zA-Z0-9-]{5,10}$/.test(orgId)) return json({ error: '组织ID必须为5-10位字母、数字或连字符' }, 400)
+    if (!/^\d{7,11}$/.test(adminPhone)) return json({ error: '手机号必须是7-11位数字' }, 400)
 
-    let newTenantId = ''
-    for (let i = 0; i < 10; i++) {
-      newTenantId = genOrgId()
-      const existing = await db.prepare('SELECT 1 FROM tenants WHERE id = ?').bind(newTenantId).first()
-      if (!existing) break
-    }
-    if (!newTenantId) return json({ error: '无法生成组织ID，请重试' }, 500)
-
-    await db.prepare('INSERT INTO tenants (id, name) VALUES (?, ?)').bind(newTenantId, orgName).run()
-    await db.prepare('INSERT INTO tenant_configs (tenant_id, value) VALUES (?, ?)')
-      .bind(newTenantId, JSON.stringify(DEFAULT_CONFIG)).run()
+    const existingTenant = await db.prepare('SELECT 1 FROM tenants WHERE id = ?').bind(orgId).first()
+    if (existingTenant) return json({ error: '组织ID已被使用' }, 409)
 
     try {
-      await db.prepare("INSERT INTO users (tenant_id, username, password_hash, role) VALUES (?, ?, ?, 'admin')")
-        .bind(newTenantId, username, hashPassword(password)).run()
+      await db.batch([
+        db.prepare('INSERT INTO tenants (id, name) VALUES (?, ?)').bind(orgId, orgName),
+        db.prepare('INSERT INTO tenant_configs (tenant_id, value) VALUES (?, ?)').bind(orgId, JSON.stringify(DEFAULT_CONFIG)),
+        db.prepare("INSERT INTO users (tenant_id, username, password_hash, role, is_creator) VALUES (?, ?, ?, 'admin', 1)").bind(orgId, adminPhone, hashPassword(password))
+      ])
 
       const token = genSessionToken()
       const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000).toISOString()
       await db.prepare('INSERT INTO sessions (token, tenant_id, username, role, expires_at) VALUES (?, ?, ?, ?, ?)')
-        .bind(token, newTenantId, username, 'admin', expiresAt).run()
+        .bind(token, orgId, adminPhone, 'admin', expiresAt).run()
 
-      return json({ ok: true, tenantId: newTenantId, tenantName: orgName, username, role: 'admin' }, 200, {
+      return json({ ok: true, tenantId: orgId, tenantName: orgName, username: adminPhone, role: 'admin' }, 200, {
         'Set-Cookie': cookieHeader(token, secure)
       })
     } catch (e) {
       if (e.message && e.message.includes('UNIQUE constraint failed')) {
-        return json({ error: '用户名已被注册' }, 409)
+        return json({ error: '该手机号已是此组织管理员' }, 409)
       }
       return json({ error: e.message }, 500)
     }
@@ -303,41 +325,67 @@ export async function onRequest(context) {
 
   if (pathname === '/api/auth/register-member' && method === 'POST') {
     const body = await request.json().catch(() => ({}))
-    const { tenantId: targetTenantId, username, password } = body
-    if (!targetTenantId || !username || !password) return json({ error: '组织ID、用户名和密码必填' }, 400)
+    const { groupId, phone, password } = body
+    if (!groupId || !phone || !password) return json({ error: '组织ID、手机号和密码必填' }, 400)
+    if (!/^\d{7,11}$/.test(phone)) return json({ error: '手机号必须是7-11位数字' }, 400)
 
-    const tenant = await db.prepare('SELECT * FROM tenants WHERE id = ?').bind(targetTenantId).first()
+    const tenant = await db.prepare('SELECT * FROM tenants WHERE id = ?').bind(groupId).first()
     if (!tenant) return json({ error: '组织不存在' }, 404)
+
+    const existing = await db.prepare('SELECT 1 FROM users WHERE tenant_id = ? AND username = ?').bind(groupId, phone).first()
+    if (existing) return json({ error: '该手机号已加入此组织' }, 409)
 
     try {
       await db.prepare("INSERT INTO users (tenant_id, username, password_hash, role) VALUES (?, ?, ?, 'member')")
-        .bind(targetTenantId, username, hashPassword(password)).run()
+        .bind(groupId, phone, hashPassword(password)).run()
 
-      const cfgRow = await db.prepare('SELECT value FROM tenant_configs WHERE tenant_id = ?').bind(targetTenantId).first()
+      const cfgRow = await db.prepare('SELECT value FROM tenant_configs WHERE tenant_id = ?').bind(groupId).first()
       const cfg = cfgRow ? JSON.parse(cfgRow.value) : JSON.parse(JSON.stringify(DEFAULT_CONFIG))
       sanitizeConfig(cfg)
-      const exists = cfg.members.find(m => m.uid === username)
+      const exists = cfg.members.find(m => m.uid === phone)
       if (!exists) {
         const gid = cfg.groups[0]?.id || ''
-        cfg.members.push({ id: genId('m'), name: username, uid: username, groupId: gid })
+        cfg.members.push({ id: genId('m'), name: phone, uid: phone, groupId: gid })
       }
       await db.prepare('INSERT OR REPLACE INTO tenant_configs (tenant_id, value) VALUES (?, ?)')
-        .bind(targetTenantId, JSON.stringify(cfg)).run()
+        .bind(groupId, JSON.stringify(cfg)).run()
 
       const token = genSessionToken()
       const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000).toISOString()
       await db.prepare('INSERT INTO sessions (token, tenant_id, username, role, expires_at) VALUES (?, ?, ?, ?, ?)')
-        .bind(token, targetTenantId, username, 'member', expiresAt).run()
+        .bind(token, groupId, phone, 'member', expiresAt).run()
 
-      return json({ ok: true, tenantId: targetTenantId, tenantName: tenant.name || targetTenantId, username, role: 'member' }, 200, {
+      return json({ ok: true, tenantId: groupId, tenantName: tenant.name || groupId, username: phone, role: 'member' }, 200, {
         'Set-Cookie': cookieHeader(token, secure)
       })
     } catch (e) {
       if (e.message && e.message.includes('UNIQUE constraint failed')) {
-        return json({ error: '用户名已被注册' }, 409)
+        return json({ error: '该手机号已加入此组织' }, 409)
       }
       return json({ error: e.message }, 500)
     }
+  }
+
+  if (pathname === '/api/auth/my-groups' && method === 'GET') {
+    if (!session) return json({ error: 'Unauthorized' }, 401)
+    if (session.role === 'superadmin') return json({ groups: [] })
+    const groups = await getUserGroups(db, session.username)
+    return json({ groups })
+  }
+
+  if (pathname === '/api/auth/select-group' && method === 'POST') {
+    if (!session || session.role === 'superadmin') return json({ error: 'Unauthorized' }, 401)
+    const body = await request.json().catch(() => ({}))
+    const { groupId } = body
+    if (!groupId) return json({ error: '组织ID必填' }, 400)
+
+    const user = await db.prepare('SELECT * FROM users WHERE username = ? AND tenant_id = ?').bind(session.username, groupId).first()
+    if (!user) return json({ error: '用户不属于该组织' }, 403)
+
+    await db.prepare('UPDATE sessions SET tenant_id = ?, role = ? WHERE token = ?')
+      .bind(groupId, user.role, session.token).run()
+
+    return json({ ok: true, tenantId: groupId, role: user.role })
   }
 
   if (pathname === '/api/superadmin/login' && method === 'POST') {
@@ -412,10 +460,12 @@ export async function onRequest(context) {
     return json({ error: 'Not found' }, 404)
   }
 
-  // ── Auth guard ──
+  // ── Auth guard for tenant routes ──
   if (!session || session.tenant_id !== tenantId) {
     return json({ error: 'Unauthorized' }, 401)
   }
+
+  await ensureTenant(db, tenantId)
 
   // ── Protected routes ──
 
@@ -427,6 +477,7 @@ export async function onRequest(context) {
 
     const user = await db.prepare('SELECT * FROM users WHERE tenant_id = ? AND username = ?').bind(tenantId, username).first()
     if (!user) return json({ error: '用户不存在' }, 404)
+    if (user.is_creator) return json({ error: '组织创建者不可删除或重置密码' }, 403)
 
     await db.prepare('UPDATE users SET password_hash = ? WHERE tenant_id = ? AND username = ?')
       .bind(hashPassword(newPassword), tenantId, username).run()

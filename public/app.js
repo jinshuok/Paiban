@@ -98,10 +98,16 @@ let mobileIsBatchMode = false;
 
 let configLoaded = false, dataLoaded = false;
 let currentTenantName = '';
-let authSubMode = 'tenant';      // 'tenant' | 'superadmin'
-let registerMode = 'create';     // 'create' | 'join'
+
+// Auth state
+let authFormMode = 'member';      // 'member' | 'createOrg' | 'superAdmin'
+let authMemberMode = 'login';     // 'login' | 'register'
 let isSuperAdmin = false;
 let superAdminMustChangePassword = false;
+let currentUserRole = null;
+let currentUsername = null;
+let myGroups = [];
+let currentGroupId = null;
 
 // ═══════════════════════════════════════════════
 //  TENANT / API HELPERS
@@ -139,10 +145,6 @@ function showTenantBadge() {
 // ═══════════════════════════════════════════════
 //  AUTH
 // ═══════════════════════════════════════════════
-let currentUserRole = null;
-let authMode = 'login'; // 'login' | 'register'
-let authHasAdmin = false;
-
 async function checkAuth() {
   try {
     const res = await fetch('/api/auth/me', { headers: apiHeaders() });
@@ -152,6 +154,14 @@ async function checkAuth() {
       currentUserRole = data.role;
       isSuperAdmin = data.isSuperAdmin || false;
       superAdminMustChangePassword = data.mustChangePassword || false;
+      currentUsername = data.username;
+      currentGroupId = data.currentGroupId;
+      myGroups = data.groups || [];
+      if (currentGroupId && currentGroupId !== '__system') {
+        localStorage.setItem('tenantId', currentGroupId);
+        const g = myGroups.find(g => g.id === currentGroupId);
+        currentTenantName = g?.name || currentGroupId;
+      }
     }
     return data.authenticated;
   } catch (e) {
@@ -177,6 +187,7 @@ function showAuthScreen() {
   document.getElementById('logoutBtn')?.classList.add('hidden');
   document.getElementById('devDocBtn')?.classList.add('hidden');
   document.getElementById('superAdminScreen')?.classList.add('hidden');
+  document.getElementById('groupSwitcherWrap')?.classList.add('hidden');
   updateAuthUI();
 }
 
@@ -197,151 +208,315 @@ function hideAuthScreen() {
     btn?.classList.remove('hidden');
     btn?.classList.add('flex');
   }
+  document.getElementById('headerOrgName').textContent = currentTenantName || getTenantId();
+  document.getElementById('headerSubTitle').classList.remove('hidden');
+  loadMyGroups();
 }
 
 function updateAuthUI() {
-  const loginBtn = document.getElementById('authModeLogin');
-  const regBtn = document.getElementById('authModeRegister');
-  const tenantTabs = document.getElementById('authTenantTabs');
-  const confirmWrap = document.getElementById('authConfirmWrap');
+  const memberForm = document.getElementById('memberAuthForm');
+  const createForm = document.getElementById('createOrgForm');
+  const saForm = document.getElementById('superAdminForm');
+  const backWrap = document.getElementById('backToMemberLinkWrap');
+  const authTitle = document.getElementById('authTitle');
+  const authSubtitle = document.getElementById('authSubtitle');
   const submitBtn = document.getElementById('authSubmitBtn');
-  const title = document.getElementById('authTitle');
-  const badge = document.getElementById('authTenantBadge');
-  const regOptions = document.getElementById('authRegisterOptions');
-  const orgNameWrap = document.getElementById('authOrgNameWrap');
-  const orgIdWrap = document.getElementById('authOrgIdWrap');
-  const superAdminLink = document.getElementById('superAdminLink');
-  const backLink = document.getElementById('backToTenantLink');
 
-  if (authSubMode === 'superadmin') {
-    tenantTabs?.classList.add('hidden');
-    regOptions?.classList.add('hidden');
-    orgNameWrap?.classList.add('hidden');
-    orgIdWrap?.classList.add('hidden');
-    confirmWrap?.classList.add('hidden');
-    superAdminLink?.classList.add('hidden');
-    backLink?.classList.remove('hidden');
-    if (title) title.textContent = '超级管理员登录';
-    if (badge) badge.textContent = 'System';
+  memberForm?.classList.toggle('hidden', authFormMode !== 'member');
+  createForm?.classList.toggle('hidden', authFormMode !== 'createOrg');
+  saForm?.classList.toggle('hidden', authFormMode !== 'superAdmin');
+  backWrap?.classList.toggle('hidden', authFormMode === 'member');
+
+  if (authFormMode === 'member') {
+    if (authTitle) authTitle.textContent = '排班大师';
+    if (authSubtitle) authSubtitle.textContent = authMemberMode === 'login' ? '成员登录' : '加入组织';
+
+    const loginBtn = document.getElementById('authModeLogin');
+    const regBtn = document.getElementById('authModeRegister');
+
+    loginBtn?.classList.toggle('bg-white', authMemberMode === 'login');
+    loginBtn?.classList.toggle('shadow-sm', authMemberMode === 'login');
+    loginBtn?.classList.toggle('text-slate-800', authMemberMode === 'login');
+    loginBtn?.classList.toggle('text-slate-500', authMemberMode !== 'login');
+
+    regBtn?.classList.toggle('bg-white', authMemberMode === 'register');
+    regBtn?.classList.toggle('shadow-sm', authMemberMode === 'register');
+    regBtn?.classList.toggle('text-slate-800', authMemberMode === 'register');
+    regBtn?.classList.toggle('text-slate-500', authMemberMode !== 'register');
+
+    document.getElementById('authGroupIdWrap')?.classList.toggle('hidden', authMemberMode === 'login');
+    document.getElementById('authConfirmWrap')?.classList.toggle('hidden', authMemberMode === 'login');
+    if (submitBtn) submitBtn.textContent = authMemberMode === 'login' ? '登录' : '注册';
+  } else if (authFormMode === 'createOrg') {
+    if (authTitle) authTitle.textContent = '注册新组织';
+    if (authSubtitle) authSubtitle.textContent = '创建您的组织';
+    if (submitBtn) submitBtn.textContent = '创建组织';
+  } else if (authFormMode === 'superAdmin') {
+    if (authTitle) authTitle.textContent = '超级管理员';
+    if (authSubtitle) authSubtitle.textContent = '后台登录';
     if (submitBtn) submitBtn.textContent = '登录';
-    return;
-  }
-
-  tenantTabs?.classList.remove('hidden');
-  superAdminLink?.classList.remove('hidden');
-  backLink?.classList.add('hidden');
-  if (title) title.textContent = '排班大师';
-  if (badge) badge.textContent = getTenantId();
-
-  if (authMode === 'login') {
-    loginBtn?.classList.add('bg-white', 'shadow-sm', 'text-slate-800');
-    loginBtn?.classList.remove('text-slate-500');
-    regBtn?.classList.remove('bg-white', 'shadow-sm', 'text-slate-800');
-    regBtn?.classList.add('text-slate-500');
-    regOptions?.classList.add('hidden');
-    orgNameWrap?.classList.add('hidden');
-    orgIdWrap?.classList.add('hidden');
-    confirmWrap?.classList.add('hidden');
-    if (submitBtn) submitBtn.textContent = '登录';
-  } else {
-    regBtn?.classList.add('bg-white', 'shadow-sm', 'text-slate-800');
-    regBtn?.classList.remove('text-slate-500');
-    loginBtn?.classList.remove('bg-white', 'shadow-sm', 'text-slate-800');
-    loginBtn?.classList.add('text-slate-500');
-    regOptions?.classList.remove('hidden');
-    confirmWrap?.classList.remove('hidden');
-    if (submitBtn) submitBtn.textContent = '注册';
-
-    const createBtn = document.getElementById('regModeCreate');
-    const joinBtn = document.getElementById('regModeJoin');
-    if (registerMode === 'create') {
-      createBtn?.classList.add('bg-indigo-600', 'text-white');
-      createBtn?.classList.remove('bg-white', 'text-slate-600', 'hover:bg-slate-50');
-      joinBtn?.classList.remove('bg-indigo-600', 'text-white');
-      joinBtn?.classList.add('bg-white', 'text-slate-600', 'hover:bg-slate-50');
-      orgNameWrap?.classList.remove('hidden');
-      orgIdWrap?.classList.add('hidden');
-    } else {
-      joinBtn?.classList.add('bg-indigo-600', 'text-white');
-      joinBtn?.classList.remove('bg-white', 'text-slate-600', 'hover:bg-slate-50');
-      createBtn?.classList.remove('bg-indigo-600', 'text-white');
-      createBtn?.classList.add('bg-white', 'text-slate-600', 'hover:bg-slate-50');
-      orgNameWrap?.classList.add('hidden');
-      orgIdWrap?.classList.remove('hidden');
-    }
   }
 }
 
 async function submitAuth() {
-  const username = document.getElementById('authUsername').value.trim();
-  const password = document.getElementById('authPassword').value;
-  const confirm = document.getElementById('authConfirmPassword').value;
   const errorEl = document.getElementById('authError');
+  errorEl?.classList.add('hidden');
 
-  if (!username || !password) {
-    errorEl.textContent = '请输入用户名和密码';
-    errorEl.classList.remove('hidden');
-    return;
-  }
-  if (authSubMode !== 'superadmin' && authMode === 'register' && password !== confirm) {
-    errorEl.textContent = '两次输入的密码不一致';
-    errorEl.classList.remove('hidden');
-    return;
-  }
-
-  errorEl.classList.add('hidden');
-
-  let url, body;
-  if (authSubMode === 'superadmin') {
-    url = '/api/superadmin/login';
-    body = JSON.stringify({ username, password });
-  } else if (authMode === 'login') {
-    url = '/api/auth/login';
-    body = JSON.stringify({ username, password });
-  } else if (registerMode === 'create') {
-    const orgName = document.getElementById('authOrgName').value.trim();
-    if (!orgName) {
-      errorEl.textContent = '请输入组织名称';
+  if (authFormMode === 'superAdmin') {
+    const username = document.getElementById('authSaUsername').value.trim();
+    const password = document.getElementById('authSaPassword').value;
+    if (!username || !password) {
+      errorEl.textContent = '请输入用户名和密码';
       errorEl.classList.remove('hidden');
       return;
     }
-    url = '/api/auth/register-admin';
-    body = JSON.stringify({ orgName, username, password });
-  } else {
+    const res = await fetch('/api/superadmin/login', {
+      method: 'POST',
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ username, password })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      isSuperAdmin = true;
+      currentUserRole = 'superadmin';
+      superAdminMustChangePassword = data.mustChangePassword || false;
+      currentUsername = data.username;
+      hideAuthScreen();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      errorEl.textContent = data.error || '登录失败';
+      errorEl.classList.remove('hidden');
+    }
+    return;
+  }
+
+  if (authFormMode === 'createOrg') {
+    const orgName = document.getElementById('authOrgName').value.trim();
     const orgId = document.getElementById('authOrgId').value.trim();
-    if (!orgId) {
+    const adminPhone = document.getElementById('authAdminPhone').value.trim();
+    const password = document.getElementById('authOrgPassword').value;
+    const confirm = document.getElementById('authOrgConfirmPassword').value;
+
+    if (!orgName || !orgId || !adminPhone || !password) {
+      errorEl.textContent = '所有字段必填';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    if (password !== confirm) {
+      errorEl.textContent = '两次输入的密码不一致';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    const res = await fetch('/api/auth/register-admin', {
+      method: 'POST',
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ orgName, orgId, adminPhone, password })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      currentUserRole = 'admin';
+      currentUsername = data.username;
+      currentGroupId = data.tenantId;
+      currentTenantName = data.tenantName || data.tenantId;
+      localStorage.setItem('tenantId', data.tenantId);
+      hideAuthScreen();
+      loadConfig(); loadData();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      errorEl.textContent = data.error || '创建失败';
+      errorEl.classList.remove('hidden');
+    }
+    return;
+  }
+
+  // member auth form
+  const phone = document.getElementById('authPhone').value.trim();
+  const password = document.getElementById('authPassword').value;
+
+  if (!phone || !password) {
+    errorEl.textContent = '请输入手机号和密码';
+    errorEl.classList.remove('hidden');
+    return;
+  }
+
+  if (authMemberMode === 'register') {
+    const confirm = document.getElementById('authConfirmPassword').value;
+    const groupId = document.getElementById('authGroupId').value.trim();
+    if (!groupId) {
       errorEl.textContent = '请输入组织ID';
       errorEl.classList.remove('hidden');
       return;
     }
-    url = '/api/auth/register-member';
-    body = JSON.stringify({ tenantId: orgId, username, password });
+    if (password !== confirm) {
+      errorEl.textContent = '两次输入的密码不一致';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    const res = await fetch('/api/auth/register-member', {
+      method: 'POST',
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ groupId, phone, password })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      currentUserRole = 'member';
+      currentUsername = data.username;
+      currentGroupId = data.tenantId;
+      currentTenantName = data.tenantName || data.tenantId;
+      localStorage.setItem('tenantId', data.tenantId);
+      hideAuthScreen();
+      loadConfig(); loadData();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      errorEl.textContent = data.error || '注册失败';
+      errorEl.classList.remove('hidden');
+    }
+    return;
   }
 
-  const res = await fetch(url, {
+  // login
+  const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: apiHeaders({ 'Content-Type': 'application/json' }),
-    body
+    body: JSON.stringify({ phone, password })
   });
-
   if (res.ok) {
     const data = await res.json();
+    if (data.isSuperAdmin) {
+      isSuperAdmin = true;
+      currentUserRole = 'superadmin';
+      superAdminMustChangePassword = data.mustChangePassword || false;
+      currentUsername = data.username;
+      hideAuthScreen();
+      return;
+    }
     currentUserRole = data.role;
-    isSuperAdmin = data.role === 'superadmin';
-    superAdminMustChangePassword = data.mustChangePassword || false;
+    currentUsername = data.username;
+    currentGroupId = data.defaultGroupId;
+    myGroups = data.groups || [];
+    currentTenantName = myGroups.find(g => g.id === data.defaultGroupId)?.name || data.defaultGroupId;
     if (data.tenantId && data.tenantId !== '__system') {
       localStorage.setItem('tenantId', data.tenantId);
-      currentTenantName = data.tenantName || data.tenantId;
     }
-    hideAuthScreen();
-    if (!isSuperAdmin) {
-      configLoaded = false; dataLoaded = false;
+    if (myGroups.length > 1) {
+      showGroupSelector(myGroups, data.defaultGroupId);
+    } else {
+      hideAuthScreen();
       loadConfig(); loadData();
     }
   } else {
     const data = await res.json().catch(() => ({}));
-    errorEl.textContent = data.error || '操作失败';
+    errorEl.textContent = data.error || '登录失败';
     errorEl.classList.remove('hidden');
+  }
+}
+
+function resetAuthState() {
+  currentUserRole = null;
+  currentUsername = null;
+  isSuperAdmin = false;
+  superAdminMustChangePassword = false;
+  myGroups = [];
+  currentGroupId = null;
+  authFormMode = 'member';
+  authMemberMode = 'login';
+}
+
+// ═══════════════════════════════════════════════
+//  GROUP SELECTOR / SWITCHER
+// ═══════════════════════════════════════════════
+function showGroupSelector(groups, defaultGroupId) {
+  const modal = document.getElementById('groupSelectorModal');
+  const list = document.getElementById('groupSelectorList');
+  list.innerHTML = groups.map(g => `
+    <button class="group-selector-item w-full text-left px-4 py-3 rounded-xl border hover:bg-indigo-50 transition flex items-center justify-between ${g.id === defaultGroupId ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 bg-white'}" data-id="${g.id}">
+      <div>
+        <div class="font-medium text-slate-800">${g.name || g.id}</div>
+        <div class="text-xs text-slate-400 font-mono">${g.id}</div>
+      </div>
+      <div class="text-xs text-slate-500">${g.role === 'admin' ? '管理员' : '成员'}</div>
+    </button>
+  `).join('');
+
+  list.querySelectorAll('.group-selector-item').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const groupId = btn.dataset.id;
+      await selectGroup(groupId);
+    });
+  });
+
+  modal?.classList.remove('hidden');
+}
+
+async function selectGroup(groupId) {
+  const res = await fetch('/api/auth/select-group', {
+    method: 'POST',
+    headers: apiHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ groupId })
+  });
+  if (res.ok) {
+    const data = await res.json();
+    currentGroupId = data.tenantId;
+    currentUserRole = data.role;
+    const group = myGroups.find(g => g.id === groupId);
+    currentTenantName = group?.name || groupId;
+    localStorage.setItem('tenantId', groupId);
+    document.getElementById('groupSelectorModal')?.classList.add('hidden');
+    hideAuthScreen();
+    loadConfig(); loadData();
+  } else {
+    const data = await res.json().catch(() => ({}));
+    showToast(data.error || '切换组织失败');
+  }
+}
+
+async function loadMyGroups() {
+  try {
+    const res = await fetch('/api/auth/my-groups', { headers: apiHeaders() });
+    if (res.ok) {
+      const data = await res.json();
+      myGroups = data.groups || [];
+      renderGroupSwitcher();
+    }
+  } catch (e) {}
+}
+
+function renderGroupSwitcher() {
+  const btn = document.getElementById('groupSwitcherBtn');
+  const menu = document.getElementById('groupSwitcherMenu');
+  const options = document.getElementById('groupSwitcherOptions');
+  const label = document.getElementById('groupSwitcherLabel');
+
+  if (!myGroups || myGroups.length <= 1) {
+    btn?.classList.add('hidden');
+    return;
+  }
+
+  btn?.classList.remove('hidden');
+  const current = myGroups.find(g => g.id === currentGroupId) || myGroups[0];
+  if (label) label.textContent = current?.name || current?.id || '—';
+
+  if (options) {
+    options.innerHTML = myGroups.map(g => `
+      <button class="group-switch-option w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition flex items-center justify-between" data-id="${g.id}">
+        <span>${g.name || g.id}</span>
+        <span class="text-xs text-slate-400">${g.role === 'admin' ? '管理员' : '成员'}</span>
+      </button>
+    `).join('');
+
+    options.querySelectorAll('.group-switch-option').forEach(opt => {
+      opt.addEventListener('click', async () => {
+        const gid = opt.dataset.id;
+        if (gid === currentGroupId) {
+          menu?.classList.add('hidden');
+          return;
+        }
+        await selectGroup(gid);
+        menu?.classList.add('hidden');
+      });
+    });
   }
 }
 
@@ -406,6 +581,8 @@ function maybeInit() {
     document.getElementById('settingsOrgId').textContent = tenant;
     document.getElementById('devDocOrgId').textContent = tenant;
     document.getElementById('settingsOrgName').textContent = currentTenantName || tenant;
+    document.getElementById('headerOrgName').textContent = currentTenantName || tenant;
+    document.getElementById('headerSubTitle').classList.remove('hidden');
     render();
   }
 }
@@ -1223,7 +1400,7 @@ function renderMembersTab() {
       <thead>
         <tr class="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
           <th class="text-left py-2 px-2" style="width:100px">姓名</th>
-          <th class="text-left py-2 px-2" style="width:110px">账号 ID</th>
+          <th class="text-left py-2 px-2" style="width:110px">手机号</th>
           <th class="text-left py-2 px-2" style="width:140px">部门-团队</th>
           <th class="py-2 px-2 text-center" style="width:90px">操作</th>
         </tr>
@@ -1232,7 +1409,7 @@ function renderMembersTab() {
         ${editMembers.map((m,i) => `
           <tr data-idx="${i}" class="border-b border-slate-50 hover:bg-slate-50">
             <td class="py-1.5 px-2"><input class="m-name w-full text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500" value="${m.name}" placeholder="姓名"></td>
-            <td class="py-1.5 px-2"><input class="m-uid w-full text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500" value="${m.uid||''}" placeholder="账号ID"></td>
+            <td class="py-1.5 px-2"><input class="m-uid w-full text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500" value="${m.uid||''}" placeholder="手机号"></td>
             <td class="py-1.5 px-2">
               <select class="m-group w-full text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500 bg-white">${editGroups.map(g=>`<option value="${g.id}"${g.id===m.groupId?' selected':''}>${g.name}</option>`).join('')}</select>
             </td>
@@ -1397,7 +1574,7 @@ function doExport() {
   const days = daysInMonth(year, month);
   const members = visibleMembers();
 
-  const headerRow1 = ['姓名', '账号ID', '团队'];
+  const headerRow1 = ['姓名', '手机号', '团队'];
   const headerRow2 = ['', '', ''];
   for (let d = 1; d <= days; d++) {
     headerRow1.push(d);
@@ -1711,46 +1888,50 @@ async function confirmSaPwdChange() {
 }
 
 // ═══════════════════════════════════════════════
-//  INIT
+//  INIT & EVENT LISTENERS
 // ═══════════════════════════════════════════════
 (async function init() {
   CONFIG = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   render();
 
   const status = await fetchAuthStatus();
-  authHasAdmin = status.hasAdmin;
-  const badge = document.getElementById('authTenantBadge');
-  if (badge) badge.textContent = status.tenantId;
+  currentTenantName = status.tenantName || status.tenantId || getTenantId();
 
   const authed = await checkAuth();
   if (!authed) {
-    authMode = 'login';
+    authFormMode = 'member';
+    authMemberMode = 'login';
     showAuthScreen();
     return;
   }
+
   hideAuthScreen();
   if (!isSuperAdmin) {
     loadConfig(); loadData();
+    loadMyGroups();
   }
 })();
 
 // Auth UI events
 document.getElementById('authModeLogin')?.addEventListener('click', () => {
-  authMode = 'login';
-  authSubMode = 'tenant';
+  authMemberMode = 'login';
   updateAuthUI();
 });
 document.getElementById('authModeRegister')?.addEventListener('click', () => {
-  authMode = 'register';
-  authSubMode = 'tenant';
+  authMemberMode = 'register';
   updateAuthUI();
 });
-document.getElementById('regModeCreate')?.addEventListener('click', () => {
-  registerMode = 'create';
+document.getElementById('createOrgLink')?.addEventListener('click', () => {
+  authFormMode = 'createOrg';
   updateAuthUI();
 });
-document.getElementById('regModeJoin')?.addEventListener('click', () => {
-  registerMode = 'join';
+document.getElementById('superAdminLink')?.addEventListener('click', () => {
+  authFormMode = 'superAdmin';
+  updateAuthUI();
+});
+document.getElementById('backToMemberLink')?.addEventListener('click', () => {
+  authFormMode = 'member';
+  authMemberMode = 'login';
   updateAuthUI();
 });
 document.getElementById('authSubmitBtn')?.addEventListener('click', submitAuth);
@@ -1760,16 +1941,14 @@ document.getElementById('authPassword')?.addEventListener('keydown', e => {
 document.getElementById('authConfirmPassword')?.addEventListener('keydown', e => {
   if (e.key === 'Enter') submitAuth();
 });
-
-document.getElementById('superAdminLink')?.addEventListener('click', () => {
-  authSubMode = 'superadmin';
-  authMode = 'login';
-  updateAuthUI();
+document.getElementById('authOrgPassword')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitAuth();
 });
-document.getElementById('backToTenantLink')?.addEventListener('click', () => {
-  authSubMode = 'tenant';
-  authMode = 'login';
-  updateAuthUI();
+document.getElementById('authOrgConfirmPassword')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitAuth();
+});
+document.getElementById('authSaPassword')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitAuth();
 });
 
 document.getElementById('logoutBtn')?.addEventListener('click', async () => {
@@ -1777,11 +1956,7 @@ document.getElementById('logoutBtn')?.addEventListener('click', async () => {
     const url = isSuperAdmin ? '/api/superadmin/logout' : '/api/auth/logout';
     await fetch(url, { method: 'POST', headers: apiHeaders() });
   } catch (e) {}
-  currentUserRole = null;
-  isSuperAdmin = false;
-  superAdminMustChangePassword = false;
-  authMode = 'login';
-  authSubMode = 'tenant';
+  resetAuthState();
   showAuthScreen();
 });
 
@@ -1813,8 +1988,7 @@ document.getElementById('settingsBtn')?.addEventListener('click', () => {
 // Super Admin events
 document.getElementById('superAdminLogoutBtn')?.addEventListener('click', async () => {
   try { await fetch('/api/superadmin/logout', { method: 'POST', headers: apiHeaders() }); } catch (e) {}
-  currentUserRole = null; isSuperAdmin = false; superAdminMustChangePassword = false;
-  authMode = 'login'; authSubMode = 'tenant';
+  resetAuthState();
   showAuthScreen();
 });
 document.getElementById('superAdminChangePwdBtn')?.addEventListener('click', openSuperAdminPwdModal);
@@ -1824,4 +1998,14 @@ document.getElementById('saPwdConfirm')?.addEventListener('click', confirmSaPwdC
 document.getElementById('saTenantUsersClose')?.addEventListener('click', closeSuperAdminTenantUsersModal);
 document.getElementById('saTenantUsersModal')?.addEventListener('click', e => {
   if (e.target === document.getElementById('saTenantUsersModal')) closeSuperAdminTenantUsersModal();
+});
+
+// Group switcher
+document.getElementById('groupSwitcherBtn')?.addEventListener('click', () => {
+  document.getElementById('groupSwitcherMenu')?.classList.toggle('hidden');
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#groupSwitcherWrap')) {
+    document.getElementById('groupSwitcherMenu')?.classList.add('hidden');
+  }
 });

@@ -1,0 +1,25 @@
+Push: 1e028eb
+Date: 2026-04-17
+
+Root Cause / Motivation:
+用户要求将整个系统重构为基于手机号的多组织架构：一个手机号可属于多个组织，登录后选择组织，支持组织间切换。同时要求组织创建者（is_creator）不可被其他管理员重置密码或删除，且做好数据隔离（避免公开路由自动创建幽灵租户）。
+
+Changes / Fix Details:
+- 数据库：移除 users 表的 UNIQUE(tenant_id, username) 约束，新增 is_creator 字段（migrations/0004_multi_group.sql）
+- 认证方式：由用户名改为 7-11 位手机号
+- 注册流程拆分：
+  - 成员登录/注册（加入已有组织，需填写组织ID）
+  - 创建新组织（填写组织名称、自定义组织ID、管理员手机号、密码）
+  - 超级管理员登录（独立入口）
+- 新增后端 API：
+  - GET /api/auth/my-groups：获取当前手机号关联的所有组织
+  - POST /api/auth/select-group：切换当前会话到指定组织
+- 登录后若手机号关联多个组织，弹出组织选择器；header 增加组织切换下拉菜单
+- 创建组织时自动生成 is_creator=1 的管理员，其他管理员无法对其重置密码
+- 数据隔离：将 ensureTenant 从全局调用移到受保护路由之后，避免公开接口自动创建 default 租户
+- 前端 app.js 完全重写 auth 逻辑以适配新流程；index.html 重构认证弹窗和界面布局
+- 本地和远程 D1 均已应用 0004_multi_group.sql 迁移
+
+Deployment Notes:
+- 代码已推送 GitHub，Cloudflare Pages 将自动部署
+- 远程 D1 已通过 wrangler d1 execute --remote 应用迁移

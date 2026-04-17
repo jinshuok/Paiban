@@ -1,0 +1,34 @@
+Push: 3fec3825baccb46910de49620bfce10fc1cb2a3d
+Date: 2026-04-17
+
+Root Cause / Motivation:
+用户需要完整的多租户管理体系。原有系统仅支持单个租户内的管理员/成员两级结构，无法跨租户管理，且注册流程固定为"第一个用户是管理员、其余是成员"，不适合多个独立组织的使用场景。
+
+Changes / Fix Details:
+1. 新增超级管理员角色
+   - 默认账号 admin/admin，首次登录强制修改密码
+   - 独立的超级管理后台，可查看所有租户列表及成员详情
+   - 后端 Local 和 D1 均新增 super_admins 表
+
+2. 改造注册流程
+   - 注册时可选"创建新组织"或"加入已有组织"
+   - 创建新组织：输入组织名称，系统生成8位随机 Org ID，注册人自动成为管理员
+   - 加入已有组织：输入 Org ID，注册后成为该组织成员
+
+3. 组织信息透出
+   - 设置页面和开发文档页面均显示当前组织的 ID，方便管理员分享给成员
+
+4. 数据库变更
+   - 新增 migrations/0003_superadmin.sql
+   - 本地和远程 D1 均已应用该迁移
+
+5. 修改文件
+   - server.js (Local 后端 API + schema)
+   - functions/api/[[route]].js (D1 后端 API + schema)
+   - public/index.html (Auth UI + 超管后台 + 信息卡)
+   - public/app.js (前端交互逻辑)
+   - migrations/0003_superadmin.sql (D1 迁移)
+
+Deployment Notes:
+- 远程 D1 数据库迁移已通过 wrangler d1 migrations apply --remote 执行
+- Cloudflare Pages 将在本次 push 后自动部署

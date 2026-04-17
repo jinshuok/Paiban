@@ -34,49 +34,97 @@
     <div class="text-center mb-6">
       <div class="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-xl mx-auto mb-3">班</div>
       <h1 id="authTitle" class="text-xl font-bold text-slate-800">排班大师</h1>
-      <div id="authTenantBadge" class="text-sm text-slate-500 mt-1 font-mono">default</div>
+      <div id="authSubtitle" class="text-sm text-slate-500 mt-1">成员登录</div>
     </div>
 
-    <div id="authTenantTabs" class="flex bg-slate-100 rounded-lg p-1 mb-5">
-      <button id="authModeLogin" class="flex-1 py-1.5 rounded-md text-sm font-medium transition bg-white shadow-sm text-slate-800">登录</button>
-      <button id="authModeRegister" class="flex-1 py-1.5 rounded-md text-sm font-medium transition text-slate-500">注册</button>
-    </div>
+    <!-- Member Auth Forms -->
+    <div id="memberAuthForm">
+      <div id="authMemberTabs" class="flex bg-slate-100 rounded-lg p-1 mb-5">
+        <button id="authModeLogin" class="flex-1 py-1.5 rounded-md text-sm font-medium transition bg-white shadow-sm text-slate-800">登录</button>
+        <button id="authModeRegister" class="flex-1 py-1.5 rounded-md text-sm font-medium transition text-slate-500">注册</button>
+      </div>
 
-    <div id="authRegisterOptions" class="hidden mb-4">
-      <div class="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-medium">
-        <button id="regModeCreate" class="flex-1 py-2 bg-indigo-600 text-white transition">创建新组织</button>
-        <button id="regModeJoin" class="flex-1 py-2 bg-white text-slate-600 hover:bg-slate-50 transition">加入已有组织</button>
+      <div id="authGroupIdWrap" class="hidden mb-3">
+        <label class="block text-sm font-medium text-slate-600 mb-1">组织 ID</label>
+        <input id="authGroupId" type="text" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 font-mono" placeholder="请输入组织ID">
+      </div>
+
+      <label class="block text-sm font-medium text-slate-600 mb-1">手机号</label>
+      <input id="authPhone" type="tel" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 mb-4 font-mono" placeholder="请输入手机号">
+
+      <label class="block text-sm font-medium text-slate-600 mb-1">密码</label>
+      <input id="authPassword" type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 mb-2" placeholder="请输入密码">
+
+      <div id="authConfirmWrap" class="hidden mt-3">
+        <label class="block text-sm font-medium text-slate-600 mb-1">确认密码</label>
+        <input id="authConfirmPassword" type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500" placeholder="再次输入密码">
       </div>
     </div>
 
-    <div id="authOrgNameWrap" class="hidden mb-3">
-      <label class="block text-sm font-medium text-slate-600 mb-1">组织名称</label>
-      <input id="authOrgName" type="text" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500" placeholder="请输入组织名称">
+    <!-- Create Org Form -->
+    <div id="createOrgForm" class="hidden">
+      <div class="text-sm font-medium text-slate-700 mb-3">注册新组织</div>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">组织名称</label>
+          <input id="authOrgName" type="text" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 text-sm" placeholder="请输入组织名称">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">组织 ID <span class="text-slate-400 font-normal">(5-10位字母、数字或连字符)</span></label>
+          <input id="authOrgId" type="text" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 text-sm font-mono" placeholder="如 abc-123">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">管理员手机号</label>
+          <input id="authAdminPhone" type="tel" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 text-sm font-mono" placeholder="请输入手机号">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">密码</label>
+          <input id="authOrgPassword" type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 text-sm" placeholder="请输入密码">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">确认密码</label>
+          <input id="authOrgConfirmPassword" type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 text-sm" placeholder="再次输入密码">
+        </div>
+      </div>
     </div>
 
-    <div id="authOrgIdWrap" class="hidden mb-3">
-      <label class="block text-sm font-medium text-slate-600 mb-1">组织 ID</label>
-      <input id="authOrgId" type="text" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 font-mono" placeholder="请输入8位组织ID">
-    </div>
-
-    <label class="block text-sm font-medium text-slate-600 mb-1">用户名</label>
-    <input id="authUsername" type="text" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 mb-4" placeholder="请输入用户名">
-
-    <label class="block text-sm font-medium text-slate-600 mb-1">密码</label>
-    <input id="authPassword" type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 mb-2" placeholder="请输入密码">
-
-    <div id="authConfirmWrap" class="hidden mt-3">
-      <label class="block text-sm font-medium text-slate-600 mb-1">确认密码</label>
-      <input id="authConfirmPassword" type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500" placeholder="再次输入密码">
+    <!-- Super Admin Form -->
+    <div id="superAdminForm" class="hidden">
+      <div class="text-sm font-medium text-slate-700 mb-3">超级管理员登录</div>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">用户名</label>
+          <input id="authSaUsername" type="text" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 text-sm" value="admin">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">密码</label>
+          <input id="authSaPassword" type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 text-sm" placeholder="请输入密码">
+        </div>
+      </div>
     </div>
 
     <div id="authError" class="text-xs text-red-500 mt-3 hidden"></div>
     <button id="authSubmitBtn" class="w-full h-10 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition mt-5">登录</button>
 
-    <div class="mt-4 flex items-center justify-center gap-4 text-xs">
-      <button id="superAdminLink" class="text-slate-500 hover:text-indigo-600 transition">超级管理后台</button>
-      <button id="backToTenantLink" class="hidden text-slate-500 hover:text-indigo-600 transition">返回登录</button>
+    <div class="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between text-xs">
+      <button id="createOrgLink" class="text-indigo-600 hover:text-indigo-700 font-medium transition">注册新组织</button>
+      <button id="superAdminLink" class="text-slate-500 hover:text-indigo-600 transition">超级管理员登录</button>
     </div>
+    <div class="mt-3 text-center hidden" id="backToMemberLinkWrap">
+      <button id="backToMemberLink" class="text-xs text-slate-500 hover:text-indigo-600 transition">返回成员登录/注册</button>
+    </div>
+  </div>
+</div>
+
+<!-- Group Selector Modal (post-login) -->
+<div id="groupSelectorModal" class="hidden fixed inset-0 z-[550] flex items-center justify-center bg-slate-50/90 backdrop-blur-sm">
+  <div class="bg-white rounded-2xl shadow-2xl p-6 w-[360px] max-w-[90vw]">
+    <div class="text-center mb-4">
+      <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg mx-auto mb-2">班</div>
+      <h2 class="text-lg font-bold text-slate-800">选择组织</h2>
+      <p class="text-xs text-slate-500 mt-1">该手机号关联多个组织，请选择要进入的组织</p>
+    </div>
+    <div id="groupSelectorList" class="space-y-2 max-h-[240px] overflow-y-auto"></div>
   </div>
 </div>
 
@@ -85,8 +133,8 @@
   <div class="flex items-center gap-2">
     <div class="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-semibold text-sm">班</div>
     <div class="flex flex-col leading-none">
-      <span class="font-semibold text-slate-800 tracking-tight">排班大师</span>
-      <span id="tenantBadge" class="text-[10px] text-slate-400 font-medium mt-0.5 hidden">default</span>
+      <span id="headerOrgName" class="font-semibold text-slate-800 tracking-tight">排班大师</span>
+      <span id="headerSubTitle" class="text-[10px] text-slate-400 font-medium mt-0.5 hidden">排班表</span>
     </div>
   </div>
   <div class="w-px h-5 bg-slate-200 hidden sm:block"></div>
@@ -103,6 +151,18 @@
   <div id="topLegend" class="hidden md:flex items-center gap-2 flex-wrap"></div>
   <div class="flex-1"></div>
   <div class="flex items-center gap-2">
+    <!-- Group Switcher Dropdown -->
+    <div class="relative" id="groupSwitcherWrap">
+      <button id="groupSwitcherBtn" class="hidden h-8 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-medium text-slate-600 transition flex items-center gap-1">
+        <span id="groupSwitcherLabel">—</span>
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"/></svg>
+      </button>
+      <div id="groupSwitcherMenu" class="hidden absolute right-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-40 overflow-hidden">
+        <div class="px-3 py-2 text-xs font-medium text-slate-400 border-b border-slate-100">切换组织</div>
+        <div id="groupSwitcherOptions" class="max-h-56 overflow-y-auto"></div>
+      </div>
+    </div>
+
     <button id="settingsBtn" class="h-8 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-medium text-slate-600 transition flex items-center gap-1">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
       <span class="hidden sm:inline">设置</span>
@@ -306,9 +366,7 @@ ScheduleAPI.getDaySchedule("2026-04-16")</code></pre>
                 <th class="text-left px-4 py-2 font-medium">操作</th>
               </tr>
             </thead>
-            <tbody id="saTenantListBody" class="divide-y divide-slate-100">
-              <!-- populated by JS -->
-            </tbody>
+            <tbody id="saTenantListBody" class="divide-y divide-slate-100"></tbody>
           </table>
         </div>
         <div id="saTenantListEmpty" class="hidden px-4 py-8 text-center text-sm text-slate-400">暂无组织</div>

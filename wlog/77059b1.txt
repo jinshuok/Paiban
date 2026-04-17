@@ -1,0 +1,19 @@
+Push: 77059b1
+Date: 2026-04-17
+
+Root Cause / Motivation:
+用户报告超级管理员登录报错 403 "需要超级管理员权限"。
+原因是 D1 后端中 `/api/superadmin/login` 被错误地放在了 superadmin auth guard 之后：guard 通过 `pathname.startsWith('/api/superadmin/')` 拦截了登录接口，在未登录状态下直接返回 403，导致永远无法登录。
+
+Changes / Fix Details:
+- 将 `/api/superadmin/login` 的处理逻辑提前到 superadmin auth guard 之前
+- 使其成为公开路由，无需已有 session 即可调用
+- 本地 backend (server.js) 原本就没有这个问题，仅修复 D1 (`functions/api/[[route]].js`)
+
+Password Update:
+- 根据用户要求，将本地和远程 D1 数据库中 super admin (admin) 的密码更新为 `paibandashi`
+- 同时把 `must_change_password` 设为 0，避免再次强制改密码
+
+Deployment Notes:
+- 代码已推送 GitHub，Cloudflare Pages 将自动部署
+- 远程 D1 密码已直接通过 wrangler d1 execute --remote 更新
