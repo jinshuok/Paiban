@@ -3,22 +3,22 @@
 // ═══════════════════════════════════════════════
 const DEFAULT_CONFIG = {
   groups: [
-    { id: 'g1', name: '产品-数科' },
-    { id: 'g2', name: '产品-供管' },
-    { id: 'g3', name: '产品-销管' },
-    { id: 'g4', name: '测试&运营' },
+    { id: 'g1', name: '产品-*科' },
+    { id: 'g2', name: '产品-*管' },
+    { id: 'g3', name: '产品-*管' },
+    { id: 'g4', name: '测试&*营' },
   ],
   members: [
-    { id: 'm1',  name: '李日凤', uid: 'lirifeng', groupId: 'g1' },
-    { id: 'm2',  name: '曹铭',   uid: 'caoming', groupId: 'g1' },
-    { id: 'm3',  name: '钟贵秋', uid: 'zhongguiqiu', groupId: 'g1' },
-    { id: 'm4',  name: '何粤灵', uid: 'heyueling', groupId: 'g2' },
-    { id: 'm5',  name: '曾金梅', uid: 'zengjinmei', groupId: 'g2' },
-    { id: 'm6',  name: '苏允旋', uid: 'suyunxuan', groupId: 'g3' },
-    { id: 'm7',  name: '邓大广', uid: 'dengdaguang', groupId: 'g3' },
-    { id: 'm8',  name: '陈清梅', uid: 'chenqingmei', groupId: 'g4' },
-    { id: 'm9',  name: '廖美凤', uid: 'liaomeifeng', groupId: 'g4' },
-    { id: 'm10', name: '吴慧茹', uid: 'wuhuiru', groupId: 'g4' },
+    { id: 'm1',  name: '李*凤', uid: 'lirifeng', groupId: 'g1' },
+    { id: 'm2',  name: '曹*',   uid: 'caoming', groupId: 'g1' },
+    { id: 'm3',  name: '钟*秋', uid: 'zhongguiqiu', groupId: 'g1' },
+    { id: 'm4',  name: '何*灵', uid: 'heyueling', groupId: 'g2' },
+    { id: 'm5',  name: '曾*梅', uid: 'zengjinmei', groupId: 'g2' },
+    { id: 'm6',  name: '苏*旋', uid: 'suyunxuan', groupId: 'g3' },
+    { id: 'm7',  name: '邓*广', uid: 'dengdaguang', groupId: 'g3' },
+    { id: 'm8',  name: '陈*梅', uid: 'chenqingmei', groupId: 'g4' },
+    { id: 'm9',  name: '廖*凤', uid: 'liaomeifeng', groupId: 'g4' },
+    { id: 'm10', name: '吴*茹', uid: 'wuhuiru', groupId: 'g4' },
   ],
   statuses: [
     { id: 'work',   label: '正常班', short: '班', color: '#2563eb', timeStart: '09:00', timeEnd: '18:00', inCycle: true  },
@@ -263,7 +263,7 @@ async function saveData() {
     const res = await fetch(`/api/schedule/${year}/${month}`, { method: 'POST', headers: apiHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(scheduleData) });
     if (!res.ok) showToast('保存数据失败');
     else localStorage.setItem(storageKey(), JSON.stringify(scheduleData));
-  } catch (e) { showToast('保存数据失败（离线模式）'); }
+  } catch (e) { showToast('已缓存到本地（离线模式）'); }
 }
 
 function maybeInit() { if (configLoaded && dataLoaded) { showTenantBadge(); render(); } }
@@ -346,14 +346,14 @@ function renderTable() {
     const div = document.createElement('div');
     const we = isWeekend(year, month, d);
     const td = isToday(year, month, d);
-    div.className = `w-11 min-w-[44px] shrink-0 text-center py-1.5 border-r border-slate-200 ${we?'bg-red-50/40':''} ${td?'bg-indigo-50':''}`;
+    div.className = `w-11 min-w-[44px] shrink-0 text-center py-1.5 border-r border-slate-300 ${we?'bg-red-50':''} ${td?'bg-indigo-50':''}`;
     div.innerHTML = `<div class="text-xs font-semibold font-mono ${we?'text-red-500':'text-slate-700'} ${td?'text-indigo-600':''}">${d}</div>
                      <div class="text-[10px] text-slate-400">${weekdayStr(year,month,d)}</div>`;
     head.appendChild(div);
   }
 
   const statCol = document.createElement('div');
-  statCol.className = 'w-20 min-w-[80px] shrink-0 flex items-center justify-center text-[10px] font-semibold text-slate-400 border-l-2 border-slate-200 bg-slate-50';
+  statCol.className = 'w-20 min-w-[80px] shrink-0 flex items-center justify-center text-[10px] font-semibold text-slate-400 border-l-2 border-slate-300 bg-slate-50';
   statCol.textContent = '统计';
   head.appendChild(statCol);
 
@@ -364,17 +364,17 @@ function renderTable() {
     const mIdx = CONFIG.members.indexOf(m);
     const group = CONFIG.groups.find(g => g.id === m.groupId);
     const row = document.createElement('div');
-    row.className = 'flex items-stretch border-b border-slate-100 hover:bg-slate-50/60';
+    row.className = 'flex items-stretch border-b border-slate-200 hover:bg-slate-50/60';
 
     const nc = document.createElement('div');
-    nc.className = 'w-40 min-w-[160px] shrink-0 px-3 flex items-center gap-2 bg-white border-r border-slate-100 stickyleft hover:bg-slate-50/60';
+    nc.className = 'w-40 min-w-[160px] shrink-0 px-3 flex items-center gap-2 bg-white border-r border-slate-200 stickyleft hover:bg-slate-50/60';
     nc.innerHTML = `
       <div class="w-7 h-7 rounded-full text-white flex items-center justify-center text-xs font-semibold shrink-0" style="background:${memberColor(mIdx)}">${m.name[0]}</div>
       <div class="min-w-0"><div class="text-sm font-medium text-slate-700 truncate">${m.name}</div><div class="text-[10px] text-slate-400 truncate">${m.uid||'—'}</div></div>`;
     row.appendChild(nc);
 
     const tc = document.createElement('div');
-    tc.className = 'w-20 min-w-[80px] shrink-0 flex items-center justify-center bg-white border-r border-slate-100 stickyleft2 hover:bg-slate-50/60 text-[11px] text-slate-400 text-center px-1 leading-tight';
+    tc.className = 'w-20 min-w-[80px] shrink-0 flex items-center justify-center bg-white border-r border-slate-200 stickyleft2 hover:bg-slate-50/60 text-[11px] text-slate-400 text-center px-1 leading-tight';
     tc.textContent = group?.name || '—';
     row.appendChild(tc);
 
@@ -386,7 +386,7 @@ function renderTable() {
       const td = isToday(year, month, d);
 
       const cell = document.createElement('div');
-      cell.className = `w-11 min-w-[44px] h-12 shrink-0 border-r border-slate-100 flex items-center justify-center cursor-pointer relative select-none transition-colors ${we?'bg-red-50/40':''} ${td?'bg-indigo-50':''}`;
+      cell.className = `w-11 min-w-[44px] h-12 shrink-0 border-r border-slate-200 flex items-center justify-center cursor-pointer relative select-none transition-colors ${we?'bg-red-50':''} ${td?'bg-indigo-50':''}`;
       cell.dataset.key = key;
       cell.dataset.mid = m.id;
       cell.dataset.day = d;
@@ -482,7 +482,7 @@ function addToSelection(cell) {
   selCells.add(key);
   cell.classList.add('selecting');
   const inner = cell.querySelector('.cell-inner, div');
-  if(inner) inner.classList.add('ring-2','ring-indigo-500','ring-offset-1','scale-110');
+  if(inner) inner.classList.add('ring-2','ring-indigo-500','scale-110');
 }
 
 function clearSelection() {
@@ -491,7 +491,7 @@ function clearSelection() {
     if (el) {
       el.classList.remove('selecting');
       const inner = el.querySelector('div');
-      if(inner) inner.classList.remove('ring-2','ring-indigo-500','ring-offset-1','scale-110');
+      if(inner) inner.classList.remove('ring-2','ring-indigo-500','scale-110');
     }
   });
   selCells.clear();
@@ -526,17 +526,17 @@ function showBatchPopup() {
 
   const cells = Array.from(selCells).map(key => document.querySelector(`[data-key="${key}"]`)).filter(Boolean);
   if (cells.length > 0) {
-    const first = cells[0].getBoundingClientRect();
-    const last = cells[cells.length - 1].getBoundingClientRect();
-    const centerX = (first.left + last.right) / 2;
-    const centerY = (first.top + last.bottom) / 2;
+    const rightMost = cells.reduce((max, cell) => {
+      const r = cell.getBoundingClientRect();
+      return r.right > max.right ? r : max;
+    }, cells[0].getBoundingClientRect());
 
     popup.classList.remove('hidden');
     const pw = popup.offsetWidth, ph = popup.offsetHeight;
-    let left = centerX - pw / 2;
-    let top = centerY - ph / 2;
+    let left = rightMost.right + 8;
+    let top = rightMost.top + rightMost.height / 2 - ph / 2;
+    if (left + pw > window.innerWidth - 10) left = rightMost.left - pw - 8;
     if (left < 10) left = 10;
-    if (left + pw > window.innerWidth - 10) left = window.innerWidth - pw - 10;
     if (top < 60) top = 60;
     if (top + ph > window.innerHeight - 10) top = window.innerHeight - ph - 10;
     popup.style.left = left + 'px';
@@ -667,23 +667,21 @@ function renderMobileView() {
 
   // Member nav
   const memberNav = document.createElement('div');
-  memberNav.className = 'bg-white rounded-xl border border-slate-200 p-3 flex items-center justify-between';
+  memberNav.className = 'bg-white rounded-xl border border-slate-200 p-3 flex items-center gap-2';
   memberNav.innerHTML = `
-    <div class="flex items-center gap-3">
-      <div class="w-9 h-9 rounded-full text-white flex items-center justify-center text-sm font-semibold" style="background:${memberColor(mIdx)}">${currentMember.name[0]}</div>
-      <div>
-        <div class="text-sm font-semibold text-slate-800">${currentMember.name}</div>
-        <div class="text-[11px] text-slate-400">${group?.name || '—'} ${currentMember.uid ? '| ' + currentMember.uid : ''}</div>
+    <button id="mobilePrevMember" class="w-8 h-8 rounded-lg border border-slate-200 hover:bg-slate-50 flex items-center justify-center text-slate-500 transition ${mobileMemberIndex<=0?'opacity-40 cursor-not-allowed':''}">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <div class="flex-1 flex items-center justify-center gap-3 min-w-0">
+      <div class="w-9 h-9 rounded-full text-white flex items-center justify-center text-sm font-semibold shrink-0" style="background:${memberColor(mIdx)}">${currentMember.name[0]}</div>
+      <div class="min-w-0 text-center">
+        <div class="text-sm font-semibold text-slate-800 truncate">${currentMember.name}</div>
+        <div class="text-[11px] text-slate-400 truncate">${group?.name || '—'} ${currentMember.uid ? '| ' + currentMember.uid : ''}</div>
       </div>
     </div>
-    <div class="flex gap-1">
-      <button id="mobilePrevMember" class="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 ${mobileMemberIndex<=0?'opacity-40 cursor-not-allowed':''}">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
-      </button>
-      <button id="mobileNextMember" class="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 ${mobileMemberIndex>=mobileFilteredMembers.length-1?'opacity-40 cursor-not-allowed':''}">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
-      </button>
-    </div>`;
+    <button id="mobileNextMember" class="w-8 h-8 rounded-lg border border-slate-200 hover:bg-slate-50 flex items-center justify-center text-slate-500 transition ${mobileMemberIndex>=mobileFilteredMembers.length-1?'opacity-40 cursor-not-allowed':''}">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+    </button>`;
   mobileView.appendChild(memberNav);
 
   document.getElementById('mobilePrevMember')?.addEventListener('click', () => {
@@ -715,7 +713,7 @@ function renderMobileView() {
   wdHeader.className = 'grid grid-cols-7';
   ['日','一','二','三','四','五','六'].forEach((wd, i) => {
     const h = document.createElement('div');
-    h.className = `text-center py-2 text-[11px] font-semibold text-slate-400 border-b border-slate-100 bg-slate-50 ${(i===0||i===6)?'text-red-500':''}`;
+    h.className = `text-center py-2 text-[11px] font-semibold text-slate-400 border-b border-slate-200 bg-slate-50 ${(i===0||i===6)?'text-red-500':''}`;
     h.textContent = wd;
     wdHeader.appendChild(h);
   });
@@ -727,7 +725,7 @@ function renderMobileView() {
   const firstWd = new Date(year, month - 1, 1).getDay();
   for (let i = 0; i < firstWd; i++) {
     const empty = document.createElement('div');
-    empty.className = 'aspect-square bg-slate-50/60 opacity-40 border-b border-r border-slate-100';
+    empty.className = 'aspect-square bg-slate-50 opacity-40 border-b border-r border-slate-200';
     grid.appendChild(empty);
   }
 
@@ -739,7 +737,7 @@ function renderMobileView() {
     const td = isToday(year, month, d);
 
     const dayEl = document.createElement('div');
-    dayEl.className = `aspect-square flex flex-col items-center justify-center border-b border-r border-slate-100 cursor-pointer relative select-none transition active:opacity-70 ${we?'bg-red-50/30':''} ${td?'bg-indigo-50':''}`;
+    dayEl.className = `aspect-square flex flex-col items-center justify-center border-b border-r border-slate-200 cursor-pointer relative select-none transition active:opacity-70 ${we?'bg-red-50':''} ${td?'bg-indigo-50':''}`;
     dayEl.dataset.key = key;
     dayEl.dataset.mid = currentMember.id;
     dayEl.dataset.day = d;
@@ -869,7 +867,7 @@ function addToMobileSelection(cell) {
   selCells.add(key);
   cell.classList.add('selecting');
   const badge = cell.querySelector('div:last-child');
-  if(badge) badge.classList.add('ring-2','ring-indigo-500','ring-offset-1');
+  if(badge) badge.classList.add('ring-2','ring-indigo-500');
 }
 
 function clearMobileSelection() {
@@ -878,7 +876,7 @@ function clearMobileSelection() {
     if (el) {
       el.classList.remove('selecting');
       const badge = el.querySelector('div:last-child');
-      if(badge) badge.classList.remove('ring-2','ring-indigo-500','ring-offset-1');
+      if(badge) badge.classList.remove('ring-2','ring-indigo-500');
     }
   });
   selCells.clear();
@@ -1096,13 +1094,9 @@ function renderMembersTab() {
             <td class="py-1.5 px-2">
               <select class="m-group w-full text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500 bg-white">${editGroups.map(g=>`<option value="${g.id}"${g.id===m.groupId?' selected':''}>${g.name}</option>`).join('')}</select>
             </td>
-            <td class="py-1.5 px-2 text-center">
-              <button class="reset-pwd-member w-7 h-7 rounded-md border border-slate-200 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 text-slate-400 flex items-center justify-center transition mr-1" title="重置密码">
-                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
-              </button>
-              <button class="del-member w-7 h-7 rounded-md border border-slate-200 hover:bg-red-50 hover:text-red-500 hover:border-red-200 text-slate-400 flex items-center justify-center transition" title="删除">
-                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-              </button>
+            <td class="py-1.5 px-2 text-center whitespace-nowrap">
+              <button class="reset-pwd-member px-2 py-1 rounded-md border border-slate-200 text-xs font-medium text-slate-600 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 transition mr-1">重置密码</button>
+              <button class="del-member px-2 py-1 rounded-md border border-slate-200 text-xs font-medium text-slate-600 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition">删除</button>
             </td>
           </tr>`).join('')}
       </tbody>
@@ -1135,21 +1129,9 @@ function bindMembersTab() {
     el.addEventListener('change', syncMembers);
   });
   document.querySelectorAll('.reset-pwd-member').forEach((btn, i) => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', () => {
       const m = editMembers[i];
-      const newPwd = prompt(`重置成员 "${m.name}" (${m.uid}) 的登录密码：`);
-      if (!newPwd) return;
-      try {
-        const res = await fetch('/api/admin/reset-password', {
-          method: 'POST',
-          headers: apiHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ username: m.uid, newPassword: newPwd })
-        });
-        if (res.ok) showToast('密码已重置 ✓');
-        else { const d = await res.json().catch(() => ({})); showToast(d.error || '重置失败'); }
-      } catch (e) {
-        showToast('网络错误');
-      }
+      openResetPwdModal(m);
     });
   });
   document.querySelectorAll('.del-member').forEach((btn, i) => {
@@ -1386,6 +1368,50 @@ const ScheduleAPI = {
 };
 
 window.ScheduleAPI = ScheduleAPI;
+
+// ═══════════════════════════════════════════════
+//  RESET PASSWORD MODAL
+// ═══════════════════════════════════════════════
+let _resetPwdTargetMember = null;
+
+function openResetPwdModal(member) {
+  _resetPwdTargetMember = member;
+  document.getElementById('resetPwdTarget').textContent = member.uid || member.name;
+  document.getElementById('resetPwdInput').value = '';
+  const wrap = document.getElementById('resetPwdWrap');
+  wrap.classList.remove('hidden');
+  wrap.classList.add('flex');
+  setTimeout(() => document.getElementById('resetPwdInput')?.focus(), 50);
+}
+
+function closeResetPwdModal() {
+  const wrap = document.getElementById('resetPwdWrap');
+  wrap.classList.add('hidden');
+  wrap.classList.remove('flex');
+  _resetPwdTargetMember = null;
+}
+
+async function confirmResetPwd() {
+  const newPwd = document.getElementById('resetPwdInput').value.trim();
+  if (!newPwd || !_resetPwdTargetMember) return;
+  try {
+    const res = await fetch('/api/admin/reset-password', {
+      method: 'POST',
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ username: _resetPwdTargetMember.uid, newPassword: newPwd })
+    });
+    if (res.ok) showToast('密码已重置 ✓');
+    else { const d = await res.json().catch(() => ({})); showToast(d.error || '重置失败'); }
+  } catch (e) {
+    showToast('网络错误');
+  }
+  closeResetPwdModal();
+}
+
+document.getElementById('resetPwdCancel')?.addEventListener('click', closeResetPwdModal);
+document.getElementById('resetPwdConfirm')?.addEventListener('click', confirmResetPwd);
+document.getElementById('resetPwdInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmResetPwd(); });
+document.getElementById('resetPwdWrap')?.addEventListener('click', e => { if (e.target === document.getElementById('resetPwdWrap')) closeResetPwdModal(); });
 
 // ═══════════════════════════════════════════════
 //  INIT

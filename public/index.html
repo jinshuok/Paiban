@@ -108,7 +108,7 @@
 <div class="desktop-only flex-1 overflow-hidden">
   <main id="mainScroll" class="h-full overflow-auto">
     <div id="tableWrap" class="inline-block min-w-full">
-      <div id="tableHead" class="flex sticky top-0 z-20 bg-white border-b-2 border-slate-200"></div>
+      <div id="tableHead" class="flex sticky top-0 z-20 bg-white border-b-2 border-slate-300"></div>
       <div id="tableBody"></div>
     </div>
   </main>
@@ -219,6 +219,19 @@ ScheduleAPI.getScheduleByDate("m1", "2026-04-16")
 // 获取某天所有人排班
 ScheduleAPI.getDaySchedule("2026-04-16")</code></pre>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div id="resetPwdWrap" class="hidden fixed inset-0 bg-black/30 z-[500] flex items-center justify-center">
+  <div class="bg-white rounded-xl shadow-xl p-5 w-[320px] max-w-[90vw]">
+    <div class="text-sm font-semibold text-slate-800 mb-1">重置密码</div>
+    <div class="text-xs text-slate-500 mb-3">账号：<span id="resetPwdTarget" class="font-mono text-slate-700"></span></div>
+    <input id="resetPwdInput" type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 mb-4 text-sm" placeholder="请输入新密码">
+    <div class="flex justify-end gap-2">
+      <button id="resetPwdCancel" class="h-9 px-4 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-medium text-slate-600 transition">取消</button>
+      <button id="resetPwdConfirm" class="h-9 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">确认重置</button>
     </div>
   </div>
 </div>
