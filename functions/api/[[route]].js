@@ -645,34 +645,91 @@ export async function onRequest(context) {
     const url = new URL(request.url)
     const uid = url.searchParams.get('uid')
     const phone = url.searchParams.get('phone')
+    const group = url.searchParams.get('group')
     const dateStr = url.searchParams.get('date')
-    if (!dateStr) return json({ error: 'date 参数必填' }, 400)
-    const [year, month, day] = dateStr.split('-').map(Number)
-    if (!year || !month || !day) return json({ error: 'date 格式错误，应为 YYYY-MM-DD' }, 400)
+    const yearParam = +url.searchParams.get('year')
+    const monthParam = +url.searchParams.get('month')
+
+    if (!dateStr && (!yearParam || !monthParam)) {
+      return json({ error: 'date 或 year+month 参数必填' }, 400)
+    }
+
+    let year, month, day
+    if (dateStr) {
+      const parts = dateStr.split('-').map(Number)
+      year = parts[0]; month = parts[1]; day = parts[2]
+      if (!year || !month || !day) return json({ error: 'date 格式错误，应为 YYYY-MM-DD' }, 400)
+    } else {
+      year = yearParam; month = monthParam
+    }
 
     const cfgRow = await db.prepare('SELECT value FROM tenant_configs WHERE tenant_id = ?').bind(tenantId).first()
     const cfg = cfgRow ? JSON.parse(cfgRow.value) : JSON.parse(JSON.stringify(DEFAULT_CONFIG))
     sanitizeConfig(cfg)
 
-    let member = null
-    if (uid) {
-      member = cfg.members.find(m => m.uid === uid)
-    } else if (phone) {
-      member = cfg.members.find(m => m.uid === phone) // assuming uid is phone
+    let members = []
+    if (group) {
+      members = cfg.members.filter(m => m.groupId === group)
+    } else {
+      let member = null
+      if (uid) {
+        member = cfg.members.find(m => m.uid === uid)
+      } else if (phone) {
+        member = cfg.members.find(m => m.uid === phone)
+      }
+      if (!member) return json({ error: '成员不存在' }, 404)
+      members = [member]
     }
-    if (!member) return json({ error: '成员不存在' }, 404)
 
-    const scheduleRow = await db.prepare(
-      'SELECT status_id FROM schedules WHERE tenant_id = ? AND member_id = ? AND year = ? AND month = ? AND day = ?'
-    ).bind(tenantId, member.id, year, month, day).first()
+    const memberIds = members.map(m => m.id)
+    let results = []
+    if (dateStr) {
+      const { results: rows } = await db.prepare(
+        'SELECT member_id, status_id FROM schedules WHERE tenant_id = ? AND year = ? AND month = ? AND day = ? AND member_id IN (' + memberIds.map(() => '?').join(',') + ')'
+      ).bind(tenantId, year, month, day, ...memberIds).all()
+      results = rows || []
+    } else {
+      const { results: rows } = await db.prepare(
+        'SELECT member_id, day, status_id FROM schedules WHERE tenant_id = ? AND year = ? AND month = ? AND member_id IN (' + memberIds.map(() => '?').join(',') + ')'
+      ).bind(tenantId, year, month, ...memberIds).all()
+      results = rows || []
+    }
 
-    const status = scheduleRow ? cfg.statuses.find(s => s.id === scheduleRow.status_id) : null
+    const scheduleMap = {}
+    for (const r of results) {
+      if (dateStr) {
+        scheduleMap[r.member_id] = r.status_id
+      } else {
+        if (!scheduleMap[r.member_id]) scheduleMap[r.member_id] = {}
+        scheduleMap[r.member_id][r.day] = r.status_id
+      }
+    }
 
-    return json({
-      member: { id: member.id, name: member.name, uid: member.uid, groupId: member.groupId },
-      status: status ? { id: status.id, label: status.label, short: status.short, color: status.color } : null,
-      date: dateStr
-    })
+    const buildStatus = (statusId) => {
+      const s = statusId ? cfg.statuses.find(x => x.id === statusId) : null
+      return s ? { id: s.id, label: s.label, short: s.short, color: s.color, timeStart: s.timeStart || '', timeEnd: s.timeEnd || '', dayCount: s.dayCount !== undefined ? s.dayCount : (s.timeStart ? 1 : 0) } : null
+    }
+
+    if (dateStr) {
+      return json(members.map(member => ({
+        member: { id: member.id, name: member.name, uid: member.uid, groupId: member.groupId },
+        status: buildStatus(scheduleMap[member.id]),
+        date: dateStr
+      })))
+    } else {
+      const days = new Date(year, month, 0).getDate()
+      return json(members.map(member => {
+        const daysData = {}
+        for (let d = 1; d <= days; d++) {
+          daysData[d] = buildStatus(scheduleMap[member.id]?.[d])
+        }
+        return {
+          member: { id: member.id, name: member.name, uid: member.uid, groupId: member.groupId },
+          days: daysData,
+          year, month
+        }
+      }))
+    }
   }
 
   const dayScheduleMatch = pathname.match(/^\/api\/schedule\/day\/([0-9]{4}-[0-9]{1,2}-[0-9]{1,2})$/)
@@ -693,12 +750,16 @@ export async function onRequest(context) {
       scheduleMap[r.member_id] = r.status_id
     }
 
+    const buildStatus = (statusId) => {
+      const s = statusId ? cfg.statuses.find(x => x.id === statusId) : null
+      return s ? { id: s.id, label: s.label, short: s.short, color: s.color, timeStart: s.timeStart || '', timeEnd: s.timeEnd || '', dayCount: s.dayCount !== undefined ? s.dayCount : (s.timeStart ? 1 : 0) } : null
+    }
+
     const data = cfg.members.map(member => {
       const statusId = scheduleMap[member.id]
-      const status = statusId ? cfg.statuses.find(s => s.id === statusId) : null
       return {
         member: { id: member.id, name: member.name, uid: member.uid, groupId: member.groupId },
-        status: status ? { id: status.id, label: status.label, short: status.short, color: status.color } : null,
+        status: buildStatus(statusId),
         date: dateStr
       }
     })

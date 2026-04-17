@@ -1640,30 +1640,56 @@ X-Api-Key: <span class="dev-doc-key">your-api-key</span>
       <div>
         <h3 class="font-semibold text-slate-800 mb-2 flex items-center gap-2">
           <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">GET</span>
-          根据第三方账号或手机号读取某人值班状态
+          查询个人/整组排班（支持单日或整月）
         </h3>
         <div class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto font-mono text-xs leading-relaxed">
 <code>GET /api/schedule/member?uid=zhangsan&date=2026-04-16
+GET /api/schedule/member?group=g1&year=2026&month=4
 X-Tenant-Id: <span class="dev-doc-tenant">default</span>
 X-Api-Key: <span class="dev-doc-key">your-api-key</span></code>
         </div>
         <div class="mt-2 text-xs text-slate-500">参数说明</div>
         <ul class="text-xs text-slate-500 mt-1 list-disc list-inside">
-          <li><code>uid</code> 或 <code>phone</code>：第三方账号或手机号</li>
-          <li><code>date</code>：日期，格式 YYYY-MM-DD</li>
+          <li><code>uid</code> 或 <code>phone</code>：个人第三方账号或手机号</li>
+          <li><code>group</code>：组 ID，传入后返回该组全部成员</li>
+          <li><code>date</code>：单日查询，格式 YYYY-MM-DD（与 year+month 二选一）</li>
+          <li><code>year</code> + <code>month</code>：整月查询，返回当月每天数据</li>
         </ul>
-        <div class="mt-2 text-xs text-slate-500">响应示例</div>
-        <pre class="bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto text-xs leading-relaxed mt-1">{
-  "member": { "id": "m1", "name": "张三", "uid": "zhangsan", "groupId": "g1" },
-  "status": { "id": "work", "label": "正常班", "short": "班", "color": "#2563eb" },
-  "date": "2026-04-16"
-}</pre>
+        <div class="mt-2 text-xs text-slate-500">单日响应示例</div>
+        <pre class="bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto text-xs leading-relaxed mt-1">[
+  {
+    "member": { "id": "m1", "name": "张三", "uid": "zhangsan", "groupId": "g1" },
+    "status": {
+      "id": "work",
+      "label": "正常班",
+      "short": "班",
+      "color": "#2563eb",
+      "timeStart": "09:00",
+      "timeEnd": "18:00",
+      "dayCount": 1
+    },
+    "date": "2026-04-16"
+  }
+]</pre>
+        <div class="mt-2 text-xs text-slate-500">整月响应示例</div>
+        <pre class="bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto text-xs leading-relaxed mt-1">[
+  {
+    "member": { "id": "m1", "name": "张三", "uid": "zhangsan", "groupId": "g1" },
+    "days": {
+      "1": { "id": "work", "label": "正常班", "short": "班", "color": "#2563eb", "timeStart": "09:00", "timeEnd": "18:00", "dayCount": 1 },
+      "2": { "id": "rest", "label": "休息", "short": "休", "color": "#f59e0b", "timeStart": "", "timeEnd": "", "dayCount": 0 },
+      "3": null
+    },
+    "year": 2026,
+    "month": 4
+  }
+]</pre>
       </div>
 
       <div>
         <h3 class="font-semibold text-slate-800 mb-2 flex items-center gap-2">
           <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">GET</span>
-          批量读取一个组织的某天值班数据
+          批量读取某天全组织值班数据
         </h3>
         <div class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto font-mono text-xs leading-relaxed">
 <code>GET /api/schedule/day/2026-04-16
@@ -1674,12 +1700,15 @@ X-Api-Key: <span class="dev-doc-key">your-api-key</span></code>
         <pre class="bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-x-auto text-xs leading-relaxed mt-1">[
   {
     "member": { "id": "m1", "name": "张三", "uid": "zhangsan", "groupId": "g1" },
-    "status": { "id": "work", "label": "正常班", "short": "班", "color": "#2563eb" },
-    "date": "2026-04-16"
-  },
-  {
-    "member": { "id": "m2", "name": "李四", "uid": "lisi", "groupId": "g1" },
-    "status": { "id": "rest", "label": "休息", "short": "休", "color": "#f59e0b" },
+    "status": {
+      "id": "work",
+      "label": "正常班",
+      "short": "班",
+      "color": "#2563eb",
+      "timeStart": "09:00",
+      "timeEnd": "18:00",
+      "dayCount": 1
+    },
     "date": "2026-04-16"
   }
 ]</pre>
