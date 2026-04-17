@@ -97,6 +97,11 @@ let mobileIsDragging = false;
 let mobileIsBatchMode = false;
 
 let configLoaded = false, dataLoaded = false;
+let currentTenantName = '';
+let authSubMode = 'tenant';      // 'tenant' | 'superadmin'
+let registerMode = 'create';     // 'create' | 'join'
+let isSuperAdmin = false;
+let superAdminMustChangePassword = false;
 
 // ═══════════════════════════════════════════════
 //  TENANT / API HELPERS
@@ -143,7 +148,11 @@ async function checkAuth() {
     const res = await fetch('/api/auth/me', { headers: apiHeaders() });
     if (!res.ok) return false;
     const data = await res.json();
-    if (data.authenticated) currentUserRole = data.role;
+    if (data.authenticated) {
+      currentUserRole = data.role;
+      isSuperAdmin = data.isSuperAdmin || false;
+      superAdminMustChangePassword = data.mustChangePassword || false;
+    }
     return data.authenticated;
   } catch (e) {
     return false;
@@ -153,10 +162,12 @@ async function checkAuth() {
 async function fetchAuthStatus() {
   try {
     const res = await fetch('/api/auth/status', { headers: apiHeaders() });
-    if (!res.ok) return { tenantId: getTenantId(), hasTenant: false, hasAdmin: false };
-    return res.json();
+    if (!res.ok) return { tenantId: getTenantId(), tenantName: getTenantId(), hasTenant: false, hasAdmin: false };
+    const data = await res.json();
+    currentTenantName = data.tenantName || data.tenantId || getTenantId();
+    return data;
   } catch (e) {
-    return { tenantId: getTenantId(), hasTenant: false, hasAdmin: false };
+    return { tenantId: getTenantId(), tenantName: getTenantId(), hasTenant: false, hasAdmin: false };
   }
 }
 
@@ -165,12 +176,21 @@ function showAuthScreen() {
   if (screen) screen.classList.remove('hidden');
   document.getElementById('logoutBtn')?.classList.add('hidden');
   document.getElementById('devDocBtn')?.classList.add('hidden');
+  document.getElementById('superAdminScreen')?.classList.add('hidden');
   updateAuthUI();
 }
 
 function hideAuthScreen() {
   const screen = document.getElementById('authScreen');
   if (screen) screen.classList.add('hidden');
+  if (isSuperAdmin) {
+    document.getElementById('logoutBtn')?.classList.add('hidden');
+    document.getElementById('devDocBtn')?.classList.add('hidden');
+    document.getElementById('superAdminScreen')?.classList.remove('hidden');
+    loadSuperAdminDashboard();
+    if (superAdminMustChangePassword) showSuperAdminForcePwdModal();
+    return;
+  }
   document.getElementById('logoutBtn')?.classList.remove('hidden');
   if (currentUserRole === 'admin') {
     const btn = document.getElementById('devDocBtn');
@@ -182,27 +202,73 @@ function hideAuthScreen() {
 function updateAuthUI() {
   const loginBtn = document.getElementById('authModeLogin');
   const regBtn = document.getElementById('authModeRegister');
+  const tenantTabs = document.getElementById('authTenantTabs');
   const confirmWrap = document.getElementById('authConfirmWrap');
-  const adminHint = document.getElementById('adminRegHint');
   const submitBtn = document.getElementById('authSubmitBtn');
+  const title = document.getElementById('authTitle');
+  const badge = document.getElementById('authTenantBadge');
+  const regOptions = document.getElementById('authRegisterOptions');
+  const orgNameWrap = document.getElementById('authOrgNameWrap');
+  const orgIdWrap = document.getElementById('authOrgIdWrap');
+  const superAdminLink = document.getElementById('superAdminLink');
+  const backLink = document.getElementById('backToTenantLink');
+
+  if (authSubMode === 'superadmin') {
+    tenantTabs?.classList.add('hidden');
+    regOptions?.classList.add('hidden');
+    orgNameWrap?.classList.add('hidden');
+    orgIdWrap?.classList.add('hidden');
+    confirmWrap?.classList.add('hidden');
+    superAdminLink?.classList.add('hidden');
+    backLink?.classList.remove('hidden');
+    if (title) title.textContent = '超级管理员登录';
+    if (badge) badge.textContent = 'System';
+    if (submitBtn) submitBtn.textContent = '登录';
+    return;
+  }
+
+  tenantTabs?.classList.remove('hidden');
+  superAdminLink?.classList.remove('hidden');
+  backLink?.classList.add('hidden');
+  if (title) title.textContent = '排班大师';
+  if (badge) badge.textContent = getTenantId();
 
   if (authMode === 'login') {
     loginBtn?.classList.add('bg-white', 'shadow-sm', 'text-slate-800');
     loginBtn?.classList.remove('text-slate-500');
     regBtn?.classList.remove('bg-white', 'shadow-sm', 'text-slate-800');
     regBtn?.classList.add('text-slate-500');
+    regOptions?.classList.add('hidden');
+    orgNameWrap?.classList.add('hidden');
+    orgIdWrap?.classList.add('hidden');
     confirmWrap?.classList.add('hidden');
-    adminHint?.classList.add('hidden');
     if (submitBtn) submitBtn.textContent = '登录';
   } else {
     regBtn?.classList.add('bg-white', 'shadow-sm', 'text-slate-800');
     regBtn?.classList.remove('text-slate-500');
     loginBtn?.classList.remove('bg-white', 'shadow-sm', 'text-slate-800');
     loginBtn?.classList.add('text-slate-500');
+    regOptions?.classList.remove('hidden');
     confirmWrap?.classList.remove('hidden');
-    if (!authHasAdmin) adminHint?.classList.remove('hidden');
-    else adminHint?.classList.add('hidden');
-    if (submitBtn) submitBtn.textContent = authHasAdmin ? '注册成员账号' : '注册管理员';
+    if (submitBtn) submitBtn.textContent = '注册';
+
+    const createBtn = document.getElementById('regModeCreate');
+    const joinBtn = document.getElementById('regModeJoin');
+    if (registerMode === 'create') {
+      createBtn?.classList.add('bg-indigo-600', 'text-white');
+      createBtn?.classList.remove('bg-white', 'text-slate-600', 'hover:bg-slate-50');
+      joinBtn?.classList.remove('bg-indigo-600', 'text-white');
+      joinBtn?.classList.add('bg-white', 'text-slate-600', 'hover:bg-slate-50');
+      orgNameWrap?.classList.remove('hidden');
+      orgIdWrap?.classList.add('hidden');
+    } else {
+      joinBtn?.classList.add('bg-indigo-600', 'text-white');
+      joinBtn?.classList.remove('bg-white', 'text-slate-600', 'hover:bg-slate-50');
+      createBtn?.classList.remove('bg-indigo-600', 'text-white');
+      createBtn?.classList.add('bg-white', 'text-slate-600', 'hover:bg-slate-50');
+      orgNameWrap?.classList.add('hidden');
+      orgIdWrap?.classList.remove('hidden');
+    }
   }
 }
 
@@ -217,29 +283,61 @@ async function submitAuth() {
     errorEl.classList.remove('hidden');
     return;
   }
-  if (authMode === 'register' && password !== confirm) {
+  if (authSubMode !== 'superadmin' && authMode === 'register' && password !== confirm) {
     errorEl.textContent = '两次输入的密码不一致';
     errorEl.classList.remove('hidden');
     return;
   }
 
   errorEl.classList.add('hidden');
-  const url = authMode === 'login'
-    ? '/api/auth/login'
-    : (authHasAdmin ? '/api/auth/register-member' : '/api/auth/register-admin');
+
+  let url, body;
+  if (authSubMode === 'superadmin') {
+    url = '/api/superadmin/login';
+    body = JSON.stringify({ username, password });
+  } else if (authMode === 'login') {
+    url = '/api/auth/login';
+    body = JSON.stringify({ username, password });
+  } else if (registerMode === 'create') {
+    const orgName = document.getElementById('authOrgName').value.trim();
+    if (!orgName) {
+      errorEl.textContent = '请输入组织名称';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    url = '/api/auth/register-admin';
+    body = JSON.stringify({ orgName, username, password });
+  } else {
+    const orgId = document.getElementById('authOrgId').value.trim();
+    if (!orgId) {
+      errorEl.textContent = '请输入组织ID';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+    url = '/api/auth/register-member';
+    body = JSON.stringify({ tenantId: orgId, username, password });
+  }
 
   const res = await fetch(url, {
     method: 'POST',
     headers: apiHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ username, password })
+    body
   });
 
   if (res.ok) {
     const data = await res.json();
     currentUserRole = data.role;
+    isSuperAdmin = data.role === 'superadmin';
+    superAdminMustChangePassword = data.mustChangePassword || false;
+    if (data.tenantId && data.tenantId !== '__system') {
+      localStorage.setItem('tenantId', data.tenantId);
+      currentTenantName = data.tenantName || data.tenantId;
+    }
     hideAuthScreen();
-    configLoaded = false; dataLoaded = false;
-    loadConfig(); loadData();
+    if (!isSuperAdmin) {
+      configLoaded = false; dataLoaded = false;
+      loadConfig(); loadData();
+    }
   } else {
     const data = await res.json().catch(() => ({}));
     errorEl.textContent = data.error || '操作失败';
@@ -301,7 +399,16 @@ async function saveData() {
   } catch (e) { showToast('已缓存到本地（离线模式）'); }
 }
 
-function maybeInit() { if (configLoaded && dataLoaded) { showTenantBadge(); render(); } }
+function maybeInit() {
+  if (configLoaded && dataLoaded) {
+    showTenantBadge();
+    const tenant = getTenantId();
+    document.getElementById('settingsOrgId').textContent = tenant;
+    document.getElementById('devDocOrgId').textContent = tenant;
+    document.getElementById('settingsOrgName').textContent = currentTenantName || tenant;
+    render();
+  }
+}
 
 function getStatus(id) { return CONFIG.statuses.find(s => s.id === id) || null; }
 
@@ -1449,10 +1556,164 @@ document.getElementById('resetPwdInput')?.addEventListener('keydown', e => { if 
 document.getElementById('resetPwdWrap')?.addEventListener('click', e => { if (e.target === document.getElementById('resetPwdWrap')) closeResetPwdModal(); });
 
 // ═══════════════════════════════════════════════
+//  SUPER ADMIN DASHBOARD
+// ═══════════════════════════════════════════════
+async function loadSuperAdminDashboard() {
+  try {
+    const res = await fetch('/api/superadmin/tenants', { headers: apiHeaders() });
+    if (!res.ok) { showToast('加载数据失败'); return; }
+    const tenants = await res.json();
+    renderSuperAdminTenants(tenants);
+  } catch (e) {
+    showToast('网络错误');
+  }
+}
+
+function renderSuperAdminTenants(tenants) {
+  const tbody = document.getElementById('saTenantListBody');
+  const empty = document.getElementById('saTenantListEmpty');
+  const totalTenants = document.getElementById('saTotalTenants');
+  const totalUsers = document.getElementById('saTotalUsers');
+
+  totalTenants.textContent = tenants.length;
+  totalUsers.textContent = tenants.reduce((sum, t) => sum + (t.userCount || 0), 0);
+
+  if (!tenants.length) {
+    tbody.innerHTML = '';
+    empty?.classList.remove('hidden');
+    return;
+  }
+  empty?.classList.add('hidden');
+
+  tbody.innerHTML = tenants.map(t => `
+    <tr class="hover:bg-slate-50">
+      <td class="px-4 py-3 font-mono text-slate-700">${t.id}</td>
+      <td class="px-4 py-3 text-slate-700">${t.name || t.id}</td>
+      <td class="px-4 py-3 text-slate-500 text-xs">${t.created_at ? new Date(t.created_at).toLocaleString() : '-'}</td>
+      <td class="px-4 py-3 text-slate-700">${t.userCount || 0}</td>
+      <td class="px-4 py-3">
+        <button class="sa-view-users text-xs font-medium text-indigo-600 hover:text-indigo-700" data-id="${t.id}" data-name="${t.name || t.id}">查看成员</button>
+      </td>
+    </tr>
+  `).join('');
+
+  tbody.querySelectorAll('.sa-view-users').forEach(btn => {
+    btn.addEventListener('click', () => loadSuperAdminTenantUsers(btn.dataset.id, btn.dataset.name));
+  });
+}
+
+async function loadSuperAdminTenantUsers(tenantId, tenantName) {
+  try {
+    const res = await fetch(`/api/superadmin/tenants/${encodeURIComponent(tenantId)}/users`, { headers: apiHeaders() });
+    if (!res.ok) { showToast('加载成员失败'); return; }
+    const users = await res.json();
+    renderSuperAdminTenantUsers(tenantName, users);
+  } catch (e) {
+    showToast('网络错误');
+  }
+}
+
+function renderSuperAdminTenantUsers(tenantName, users) {
+  document.getElementById('saTenantUsersTitle').textContent = tenantName;
+  const tbody = document.getElementById('saTenantUsersBody');
+  const empty = document.getElementById('saTenantUsersEmpty');
+  const modal = document.getElementById('saTenantUsersModal');
+
+  if (!users.length) {
+    tbody.innerHTML = '';
+    empty?.classList.remove('hidden');
+  } else {
+    empty?.classList.add('hidden');
+    tbody.innerHTML = users.map(u => `
+      <tr class="hover:bg-slate-50">
+        <td class="px-3 py-2 font-mono text-slate-700">${u.username}</td>
+        <td class="px-3 py-2 text-slate-700">${u.role === 'admin' ? '管理员' : '成员'}</td>
+        <td class="px-3 py-2 text-slate-500 text-xs">${u.created_at ? new Date(u.created_at).toLocaleString() : '-'}</td>
+      </tr>
+    `).join('');
+  }
+
+  modal?.classList.remove('hidden');
+  modal?.classList.add('flex');
+}
+
+function closeSuperAdminTenantUsersModal() {
+  const modal = document.getElementById('saTenantUsersModal');
+  modal?.classList.add('hidden');
+  modal?.classList.remove('flex');
+}
+
+function showSuperAdminForcePwdModal() {
+  document.getElementById('superAdminForcePwdModal')?.classList.remove('hidden');
+}
+
+function hideSuperAdminForcePwdModal() {
+  document.getElementById('superAdminForcePwdModal')?.classList.add('hidden');
+  document.getElementById('superAdminNewPwd').value = '';
+  document.getElementById('superAdminConfirmPwd').value = '';
+  document.getElementById('superAdminPwdError')?.classList.add('hidden');
+}
+
+async function confirmSuperAdminChangePwd() {
+  const newPwd = document.getElementById('superAdminNewPwd').value;
+  const confirmPwd = document.getElementById('superAdminConfirmPwd').value;
+  const errorEl = document.getElementById('superAdminPwdError');
+
+  if (!newPwd) { errorEl.textContent = '请输入新密码'; errorEl.classList.remove('hidden'); return; }
+  if (newPwd !== confirmPwd) { errorEl.textContent = '两次输入的密码不一致'; errorEl.classList.remove('hidden'); return; }
+
+  try {
+    const res = await fetch('/api/superadmin/change-password', {
+      method: 'POST',
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ newPassword: newPwd })
+    });
+    if (res.ok) {
+      superAdminMustChangePassword = false;
+      hideSuperAdminForcePwdModal();
+      showToast('密码已修改');
+    } else {
+      const data = await res.json().catch(() => ({}));
+      errorEl.textContent = data.error || '修改失败';
+      errorEl.classList.remove('hidden');
+    }
+  } catch (e) {
+    errorEl.textContent = '网络错误';
+    errorEl.classList.remove('hidden');
+  }
+}
+
+function openSuperAdminPwdModal() {
+  document.getElementById('superAdminPwdModal')?.classList.remove('hidden');
+  document.getElementById('superAdminPwdModal')?.classList.add('flex');
+  document.getElementById('saPwdInput').value = '';
+  document.getElementById('saPwdError')?.classList.add('hidden');
+}
+
+function closeSuperAdminPwdModal() {
+  document.getElementById('superAdminPwdModal')?.classList.add('hidden');
+  document.getElementById('superAdminPwdModal')?.classList.remove('flex');
+}
+
+async function confirmSaPwdChange() {
+  const newPwd = document.getElementById('saPwdInput').value;
+  const errorEl = document.getElementById('saPwdError');
+  if (!newPwd) { errorEl.textContent = '请输入新密码'; errorEl.classList.remove('hidden'); return; }
+  try {
+    const res = await fetch('/api/superadmin/change-password', {
+      method: 'POST',
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ newPassword: newPwd })
+    });
+    if (res.ok) { closeSuperAdminPwdModal(); showToast('密码已修改'); }
+    else { const data = await res.json().catch(() => ({})); errorEl.textContent = data.error || '修改失败'; errorEl.classList.remove('hidden'); }
+  } catch (e) { errorEl.textContent = '网络错误'; errorEl.classList.remove('hidden'); }
+}
+
+// ═══════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════
 (async function init() {
-  // 先渲染默认数据作为毛玻璃背景
   CONFIG = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   render();
 
@@ -1463,22 +1724,33 @@ document.getElementById('resetPwdWrap')?.addEventListener('click', e => { if (e.
 
   const authed = await checkAuth();
   if (!authed) {
-    authMode = authHasAdmin ? 'login' : 'register';
+    authMode = 'login';
     showAuthScreen();
     return;
   }
   hideAuthScreen();
-  loadConfig();
-  loadData();
+  if (!isSuperAdmin) {
+    loadConfig(); loadData();
+  }
 })();
 
 // Auth UI events
 document.getElementById('authModeLogin')?.addEventListener('click', () => {
   authMode = 'login';
+  authSubMode = 'tenant';
   updateAuthUI();
 });
 document.getElementById('authModeRegister')?.addEventListener('click', () => {
   authMode = 'register';
+  authSubMode = 'tenant';
+  updateAuthUI();
+});
+document.getElementById('regModeCreate')?.addEventListener('click', () => {
+  registerMode = 'create';
+  updateAuthUI();
+});
+document.getElementById('regModeJoin')?.addEventListener('click', () => {
+  registerMode = 'join';
   updateAuthUI();
 });
 document.getElementById('authSubmitBtn')?.addEventListener('click', submitAuth);
@@ -1489,12 +1761,27 @@ document.getElementById('authConfirmPassword')?.addEventListener('keydown', e =>
   if (e.key === 'Enter') submitAuth();
 });
 
+document.getElementById('superAdminLink')?.addEventListener('click', () => {
+  authSubMode = 'superadmin';
+  authMode = 'login';
+  updateAuthUI();
+});
+document.getElementById('backToTenantLink')?.addEventListener('click', () => {
+  authSubMode = 'tenant';
+  authMode = 'login';
+  updateAuthUI();
+});
+
 document.getElementById('logoutBtn')?.addEventListener('click', async () => {
   try {
-    await fetch('/api/auth/logout', { method: 'POST', headers: apiHeaders() });
+    const url = isSuperAdmin ? '/api/superadmin/logout' : '/api/auth/logout';
+    await fetch(url, { method: 'POST', headers: apiHeaders() });
   } catch (e) {}
   currentUserRole = null;
+  isSuperAdmin = false;
+  superAdminMustChangePassword = false;
   authMode = 'login';
+  authSubMode = 'tenant';
   showAuthScreen();
 });
 
@@ -1521,4 +1808,20 @@ document.getElementById('settingsBtn')?.addEventListener('click', () => {
     return;
   }
   openSettings();
+});
+
+// Super Admin events
+document.getElementById('superAdminLogoutBtn')?.addEventListener('click', async () => {
+  try { await fetch('/api/superadmin/logout', { method: 'POST', headers: apiHeaders() }); } catch (e) {}
+  currentUserRole = null; isSuperAdmin = false; superAdminMustChangePassword = false;
+  authMode = 'login'; authSubMode = 'tenant';
+  showAuthScreen();
+});
+document.getElementById('superAdminChangePwdBtn')?.addEventListener('click', openSuperAdminPwdModal);
+document.getElementById('superAdminSavePwdBtn')?.addEventListener('click', confirmSuperAdminChangePwd);
+document.getElementById('saPwdCancel')?.addEventListener('click', closeSuperAdminPwdModal);
+document.getElementById('saPwdConfirm')?.addEventListener('click', confirmSaPwdChange);
+document.getElementById('saTenantUsersClose')?.addEventListener('click', closeSuperAdminTenantUsersModal);
+document.getElementById('saTenantUsersModal')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('saTenantUsersModal')) closeSuperAdminTenantUsersModal();
 });

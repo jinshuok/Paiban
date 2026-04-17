@@ -101,11 +101,18 @@ async function initSchema(db) {
     `CREATE TABLE IF NOT EXISTS schedules (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, member_id TEXT NOT NULL, year INTEGER NOT NULL, month INTEGER NOT NULL, day INTEGER NOT NULL, status_id TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(tenant_id, member_id, year, month, day))`,
     `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'member', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(tenant_id, username))`,
     `CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, username TEXT NOT NULL, role TEXT NOT NULL, expires_at DATETIME NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE TABLE IF NOT EXISTS super_admins (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, must_change_password INTEGER NOT NULL DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE INDEX IF NOT EXISTS idx_schedules_tenant ON schedules(tenant_id)`,
     `CREATE INDEX IF NOT EXISTS idx_schedules_tenant_ym ON schedules(tenant_id, year, month)`
   ]
   for (const sql of stmts) {
     await db.prepare(sql).run()
+  }
+
+  const superAdminExists = await db.prepare('SELECT 1 FROM super_admins LIMIT 1').first()
+  if (!superAdminExists) {
+    await db.prepare("INSERT INTO super_admins (username, password_hash, must_change_password) VALUES (?, ?, 1)")
+      .bind('admin', hashPassword('admin')).run()
   }
 }
 
@@ -137,6 +144,15 @@ function genId(prefix) {
 
 function genSessionToken() {
   return crypto.randomBytes(32).toString('hex')
+}
+
+function genOrgId() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  let id = ''
+  for (let i = 0; i < 8; i++) {
+    id += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return id
 }
 
 function parseCookies(request) {
@@ -191,16 +207,20 @@ export async function onRequest(context) {
   }
 
   if (pathname === '/api/auth/status' && method === 'GET') {
+    const tenant = await db.prepare('SELECT * FROM tenants WHERE id = ?').bind(tenantId).first()
     const hasAdmin = !!(await db.prepare("SELECT 1 FROM users WHERE tenant_id = ? AND role = 'admin' LIMIT 1").bind(tenantId).first())
-    return json({ tenantId, hasTenant: true, hasAdmin })
+    return json({ tenantId, tenantName: tenant?.name || tenantId, hasTenant: !!tenant, hasAdmin })
   }
 
   if (pathname === '/api/auth/me' && method === 'GET') {
+    const isSuperAdmin = !!(session && session.role === 'superadmin')
     return json({
       tenantId,
-      authenticated: !!(session && session.tenant_id === tenantId),
+      authenticated: !!(session && (session.tenant_id === tenantId || isSuperAdmin)),
       username: session?.username || null,
       role: session?.role || null,
+      isSuperAdmin,
+      mustChangePassword: isSuperAdmin ? (session?.mustChangePassword || false) : false,
     })
   }
 
@@ -208,6 +228,17 @@ export async function onRequest(context) {
     const body = await request.json().catch(() => ({}))
     const { username, password } = body
     if (!username || !password) return json({ error: '用户名和密码必填' }, 400)
+
+    const superAdmin = await db.prepare('SELECT * FROM super_admins WHERE username = ?').bind(username).first()
+    if (superAdmin && verifyPassword(password, superAdmin.password_hash)) {
+      const token = genSessionToken()
+      const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000).toISOString()
+      await db.prepare('INSERT INTO sessions (token, tenant_id, username, role, expires_at) VALUES (?, ?, ?, ?, ?)')
+        .bind(token, '__system', username, 'superadmin', expiresAt).run()
+      return json({ ok: true, tenantId: '__system', username, role: 'superadmin', isSuperAdmin: true, mustChangePassword: superAdmin.must_change_password === 1 }, 200, {
+        'Set-Cookie': cookieHeader(token, secure)
+      })
+    }
 
     const user = await db.prepare('SELECT * FROM users WHERE tenant_id = ? AND username = ?').bind(tenantId, username).first()
     if (!user || !verifyPassword(password, user.password_hash)) {
@@ -219,7 +250,7 @@ export async function onRequest(context) {
     await db.prepare('INSERT INTO sessions (token, tenant_id, username, role, expires_at) VALUES (?, ?, ?, ?, ?)')
       .bind(token, tenantId, username, user.role, expiresAt).run()
 
-    return json({ ok: true, tenantId, username, role: user.role }, 200, {
+    return json({ ok: true, tenantId, username, role: user.role, isSuperAdmin: false, mustChangePassword: false }, 200, {
       'Set-Cookie': cookieHeader(token, secure)
     })
   }
@@ -235,22 +266,31 @@ export async function onRequest(context) {
 
   if (pathname === '/api/auth/register-admin' && method === 'POST') {
     const body = await request.json().catch(() => ({}))
-    const { username, password } = body
-    if (!username || !password) return json({ error: '用户名和密码必填' }, 400)
+    const { orgName, username, password } = body
+    if (!orgName || !username || !password) return json({ error: '组织名称、用户名和密码必填' }, 400)
 
-    const hasAdmin = !!(await db.prepare("SELECT 1 FROM users WHERE tenant_id = ? AND role = 'admin' LIMIT 1").bind(tenantId).first())
-    if (hasAdmin) return json({ error: '该租户已存在管理员' }, 409)
+    let newTenantId = ''
+    for (let i = 0; i < 10; i++) {
+      newTenantId = genOrgId()
+      const existing = await db.prepare('SELECT 1 FROM tenants WHERE id = ?').bind(newTenantId).first()
+      if (!existing) break
+    }
+    if (!newTenantId) return json({ error: '无法生成组织ID，请重试' }, 500)
+
+    await db.prepare('INSERT INTO tenants (id, name) VALUES (?, ?)').bind(newTenantId, orgName).run()
+    await db.prepare('INSERT INTO tenant_configs (tenant_id, value) VALUES (?, ?)')
+      .bind(newTenantId, JSON.stringify(DEFAULT_CONFIG)).run()
 
     try {
       await db.prepare("INSERT INTO users (tenant_id, username, password_hash, role) VALUES (?, ?, ?, 'admin')")
-        .bind(tenantId, username, hashPassword(password)).run()
+        .bind(newTenantId, username, hashPassword(password)).run()
 
       const token = genSessionToken()
       const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000).toISOString()
       await db.prepare('INSERT INTO sessions (token, tenant_id, username, role, expires_at) VALUES (?, ?, ?, ?, ?)')
-        .bind(token, tenantId, username, 'admin', expiresAt).run()
+        .bind(token, newTenantId, username, 'admin', expiresAt).run()
 
-      return json({ ok: true, tenantId, username, role: 'admin' }, 200, {
+      return json({ ok: true, tenantId: newTenantId, tenantName: orgName, username, role: 'admin' }, 200, {
         'Set-Cookie': cookieHeader(token, secure)
       })
     } catch (e) {
@@ -263,14 +303,17 @@ export async function onRequest(context) {
 
   if (pathname === '/api/auth/register-member' && method === 'POST') {
     const body = await request.json().catch(() => ({}))
-    const { username, password } = body
-    if (!username || !password) return json({ error: '用户名和密码必填' }, 400)
+    const { tenantId: targetTenantId, username, password } = body
+    if (!targetTenantId || !username || !password) return json({ error: '组织ID、用户名和密码必填' }, 400)
+
+    const tenant = await db.prepare('SELECT * FROM tenants WHERE id = ?').bind(targetTenantId).first()
+    if (!tenant) return json({ error: '组织不存在' }, 404)
 
     try {
       await db.prepare("INSERT INTO users (tenant_id, username, password_hash, role) VALUES (?, ?, ?, 'member')")
-        .bind(tenantId, username, hashPassword(password)).run()
+        .bind(targetTenantId, username, hashPassword(password)).run()
 
-      const cfgRow = await db.prepare('SELECT value FROM tenant_configs WHERE tenant_id = ?').bind(tenantId).first()
+      const cfgRow = await db.prepare('SELECT value FROM tenant_configs WHERE tenant_id = ?').bind(targetTenantId).first()
       const cfg = cfgRow ? JSON.parse(cfgRow.value) : JSON.parse(JSON.stringify(DEFAULT_CONFIG))
       sanitizeConfig(cfg)
       const exists = cfg.members.find(m => m.uid === username)
@@ -279,14 +322,14 @@ export async function onRequest(context) {
         cfg.members.push({ id: genId('m'), name: username, uid: username, groupId: gid })
       }
       await db.prepare('INSERT OR REPLACE INTO tenant_configs (tenant_id, value) VALUES (?, ?)')
-        .bind(tenantId, JSON.stringify(cfg)).run()
+        .bind(targetTenantId, JSON.stringify(cfg)).run()
 
       const token = genSessionToken()
       const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000).toISOString()
       await db.prepare('INSERT INTO sessions (token, tenant_id, username, role, expires_at) VALUES (?, ?, ?, ?, ?)')
-        .bind(token, tenantId, username, 'member', expiresAt).run()
+        .bind(token, targetTenantId, username, 'member', expiresAt).run()
 
-      return json({ ok: true, tenantId, username, role: 'member' }, 200, {
+      return json({ ok: true, tenantId: targetTenantId, tenantName: tenant.name || targetTenantId, username, role: 'member' }, 200, {
         'Set-Cookie': cookieHeader(token, secure)
       })
     } catch (e) {
@@ -295,6 +338,59 @@ export async function onRequest(context) {
       }
       return json({ error: e.message }, 500)
     }
+  }
+
+  // ── Super Admin routes ──
+  const isSuperAdminRoute = pathname.startsWith('/api/superadmin/')
+  if (isSuperAdminRoute) {
+    if (!session || session.role !== 'superadmin') {
+      return json({ error: '需要超级管理员权限' }, 403)
+    }
+
+    const sa = await db.prepare('SELECT must_change_password FROM super_admins WHERE username = ?').bind(session.username).first()
+    const mustChange = sa ? sa.must_change_password === 1 : false
+
+    if (pathname !== '/api/superadmin/change-password' && pathname !== '/api/superadmin/logout' && mustChange) {
+      return json({ error: '请先修改密码' }, 403)
+    }
+
+    if (pathname === '/api/superadmin/me' && method === 'GET') {
+      return json({ username: session.username, role: 'superadmin', mustChangePassword: mustChange })
+    }
+
+    if (pathname === '/api/superadmin/change-password' && method === 'POST') {
+      const body = await request.json().catch(() => ({}))
+      const { newPassword } = body
+      if (!newPassword) return json({ error: '新密码必填' }, 400)
+      await db.prepare('UPDATE super_admins SET password_hash = ?, must_change_password = 0 WHERE username = ?')
+        .bind(hashPassword(newPassword), session.username).run()
+      return json({ ok: true })
+    }
+
+    if (pathname === '/api/superadmin/logout' && method === 'POST') {
+      await db.prepare('DELETE FROM sessions WHERE token = ?').bind(session.token).run()
+      return json({ ok: true }, 200, { 'Set-Cookie': clearCookieHeader(secure) })
+    }
+
+    if (pathname === '/api/superadmin/tenants' && method === 'GET') {
+      const { results } = await db.prepare(`
+        SELECT t.id, t.name, t.created_at,
+          (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id) AS userCount
+        FROM tenants t
+        ORDER BY t.created_at DESC
+      `).all()
+      return json(results || [])
+    }
+
+    const tenantUsersMatch = pathname.match(/^\/api\/superadmin\/tenants\/([^/]+)\/users$/)
+    if (tenantUsersMatch && method === 'GET') {
+      const targetTenantId = tenantUsersMatch[1]
+      const { results } = await db.prepare('SELECT username, role, created_at FROM users WHERE tenant_id = ? ORDER BY created_at DESC')
+        .bind(targetTenantId).all()
+      return json(results || [])
+    }
+
+    return json({ error: 'Not found' }, 404)
   }
 
   // ── Auth guard ──

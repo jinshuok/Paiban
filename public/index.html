@@ -33,17 +33,30 @@
   <div class="bg-white rounded-2xl shadow-2xl p-8 w-[400px] max-w-[90vw]">
     <div class="text-center mb-6">
       <div class="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-xl mx-auto mb-3">班</div>
-      <h1 class="text-xl font-bold text-slate-800">排班大师</h1>
+      <h1 id="authTitle" class="text-xl font-bold text-slate-800">排班大师</h1>
       <div id="authTenantBadge" class="text-sm text-slate-500 mt-1 font-mono">default</div>
     </div>
 
-    <div class="flex bg-slate-100 rounded-lg p-1 mb-5">
+    <div id="authTenantTabs" class="flex bg-slate-100 rounded-lg p-1 mb-5">
       <button id="authModeLogin" class="flex-1 py-1.5 rounded-md text-sm font-medium transition bg-white shadow-sm text-slate-800">登录</button>
       <button id="authModeRegister" class="flex-1 py-1.5 rounded-md text-sm font-medium transition text-slate-500">注册</button>
     </div>
 
-    <div id="adminRegHint" class="hidden text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-4">
-      您是第一位用户，注册后将自动成为管理员。
+    <div id="authRegisterOptions" class="hidden mb-4">
+      <div class="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-medium">
+        <button id="regModeCreate" class="flex-1 py-2 bg-indigo-600 text-white transition">创建新组织</button>
+        <button id="regModeJoin" class="flex-1 py-2 bg-white text-slate-600 hover:bg-slate-50 transition">加入已有组织</button>
+      </div>
+    </div>
+
+    <div id="authOrgNameWrap" class="hidden mb-3">
+      <label class="block text-sm font-medium text-slate-600 mb-1">组织名称</label>
+      <input id="authOrgName" type="text" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500" placeholder="请输入组织名称">
+    </div>
+
+    <div id="authOrgIdWrap" class="hidden mb-3">
+      <label class="block text-sm font-medium text-slate-600 mb-1">组织 ID</label>
+      <input id="authOrgId" type="text" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 font-mono" placeholder="请输入8位组织ID">
     </div>
 
     <label class="block text-sm font-medium text-slate-600 mb-1">用户名</label>
@@ -59,6 +72,11 @@
 
     <div id="authError" class="text-xs text-red-500 mt-3 hidden"></div>
     <button id="authSubmitBtn" class="w-full h-10 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition mt-5">登录</button>
+
+    <div class="mt-4 flex items-center justify-center gap-4 text-xs">
+      <button id="superAdminLink" class="text-slate-500 hover:text-indigo-600 transition">超级管理后台</button>
+      <button id="backToTenantLink" class="hidden text-slate-500 hover:text-indigo-600 transition">返回登录</button>
+    </div>
   </div>
 </div>
 
@@ -164,9 +182,18 @@
       <button id="modalClose" class="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center text-sm transition">✕</button>
     </div>
     <div id="modalBody" class="flex-1 overflow-y-auto p-5"></div>
-    <div class="px-5 py-3 border-t border-slate-100 flex justify-end gap-2">
-      <button id="modalCancel" class="h-9 px-4 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-medium text-slate-600 transition">取消</button>
-      <button id="modalSave" class="h-9 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">保存设置</button>
+    <div class="px-5 py-3 border-t border-slate-100 bg-slate-50/50">
+      <div class="flex items-center justify-between">
+        <div class="text-xs text-slate-500">
+          <span class="font-medium">组织:</span> <span id="settingsOrgName" class="text-slate-700">—</span>
+          <span class="mx-2 text-slate-300">|</span>
+          <span class="font-medium">ID:</span> <span id="settingsOrgId" class="font-mono text-slate-700">—</span>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button id="modalCancel" class="h-9 px-4 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-medium text-slate-600 transition">取消</button>
+          <button id="modalSave" class="h-9 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">保存设置</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -182,6 +209,11 @@
       <div>
         <h3 class="font-semibold text-slate-800 mb-2">API 基础信息</h3>
         <p>所有数据接口需要在登录态下访问。本地开发时通过请求头 <code class="bg-slate-100 px-1 rounded">X-Tenant-Id</code> 指定租户；线上通过子域名自动识别。</p>
+      </div>
+      <div>
+        <h3 class="font-semibold text-slate-800 mb-2">当前组织 ID</h3>
+        <pre class="bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto"><code id="devDocOrgId">default</code></pre>
+        <p class="text-xs text-slate-500 mt-1">成员可通过此 ID 加入您的组织</p>
       </div>
       <div>
         <h3 class="font-semibold text-slate-800 mb-2">1. 获取当前身份</h3>
@@ -232,6 +264,104 @@ ScheduleAPI.getDaySchedule("2026-04-16")</code></pre>
     <div class="flex justify-end gap-2">
       <button id="resetPwdCancel" class="h-9 px-4 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-medium text-slate-600 transition">取消</button>
       <button id="resetPwdConfirm" class="h-9 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">确认重置</button>
+    </div>
+  </div>
+</div>
+
+<!-- Super Admin Screen -->
+<div id="superAdminScreen" class="hidden fixed inset-0 z-[500] bg-slate-50 flex flex-col">
+  <header class="h-14 bg-white border-b border-slate-200 flex items-center px-4 justify-between shrink-0">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-semibold text-sm">班</div>
+      <span class="font-semibold text-slate-800">超级管理员控制台</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="superAdminChangePwdBtn" class="h-8 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-medium text-slate-600 transition">修改密码</button>
+      <button id="superAdminLogoutBtn" class="h-8 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-medium text-slate-600 transition">退出</button>
+    </div>
+  </header>
+  <main class="flex-1 overflow-auto p-4 md:p-6">
+    <div class="max-w-5xl mx-auto space-y-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+          <div class="text-xs text-slate-500 mb-1">组织总数</div>
+          <div id="saTotalTenants" class="text-2xl font-bold text-slate-800">0</div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+          <div class="text-xs text-slate-500 mb-1">用户总数</div>
+          <div id="saTotalUsers" class="text-2xl font-bold text-slate-800">0</div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-100 font-semibold text-slate-800">组织列表</div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500">
+              <tr>
+                <th class="text-left px-4 py-2 font-medium">组织 ID</th>
+                <th class="text-left px-4 py-2 font-medium">组织名称</th>
+                <th class="text-left px-4 py-2 font-medium">创建时间</th>
+                <th class="text-left px-4 py-2 font-medium">成员数</th>
+                <th class="text-left px-4 py-2 font-medium">操作</th>
+              </tr>
+            </thead>
+            <tbody id="saTenantListBody" class="divide-y divide-slate-100">
+              <!-- populated by JS -->
+            </tbody>
+          </table>
+        </div>
+        <div id="saTenantListEmpty" class="hidden px-4 py-8 text-center text-sm text-slate-400">暂无组织</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Super Admin Force Change Password Modal -->
+<div id="superAdminForcePwdModal" class="hidden fixed inset-0 z-[600] flex items-center justify-center bg-black/50">
+  <div class="bg-white rounded-xl shadow-xl p-5 w-[360px] max-w-[90vw]">
+    <div class="text-sm font-semibold text-slate-800 mb-2">首次登录，请修改密码</div>
+    <div class="text-xs text-slate-500 mb-3">为了账号安全，请先修改默认密码后再继续使用。</div>
+    <input id="superAdminNewPwd" type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 mb-3 text-sm" placeholder="新密码">
+    <input id="superAdminConfirmPwd" type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 mb-4 text-sm" placeholder="确认新密码">
+    <div id="superAdminPwdError" class="text-xs text-red-500 mb-3 hidden"></div>
+    <button id="superAdminSavePwdBtn" class="w-full h-10 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">保存并继续</button>
+  </div>
+</div>
+
+<!-- Super Admin Change Password Modal (voluntary) -->
+<div id="superAdminPwdModal" class="hidden fixed inset-0 bg-black/40 z-[600] flex items-center justify-center">
+  <div class="bg-white rounded-xl shadow-xl p-5 w-[360px] max-w-[90vw]">
+    <div class="text-sm font-semibold text-slate-800 mb-1">修改密码</div>
+    <div class="text-xs text-slate-500 mb-3">请输入新密码</div>
+    <input id="saPwdInput" type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-500 mb-4 text-sm" placeholder="新密码">
+    <div id="saPwdError" class="text-xs text-red-500 mb-3 hidden"></div>
+    <div class="flex justify-end gap-2">
+      <button id="saPwdCancel" class="h-9 px-4 rounded-lg border border-slate-200 hover:bg-slate-50 text-sm font-medium text-slate-600 transition">取消</button>
+      <button id="saPwdConfirm" class="h-9 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- Super Admin Tenant Users Modal -->
+<div id="saTenantUsersModal" class="hidden fixed inset-0 bg-black/40 z-[600] flex items-center justify-center">
+  <div class="bg-white rounded-xl shadow-xl w-[560px] max-w-[95vw] max-h-[80vh] flex flex-col">
+    <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+      <span class="font-semibold text-slate-800"><span id="saTenantUsersTitle"></span> 成员列表</span>
+      <button id="saTenantUsersClose" class="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center text-sm transition">✕</button>
+    </div>
+    <div class="flex-1 overflow-auto p-4">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-xs text-slate-500">
+          <tr>
+            <th class="text-left px-3 py-2 font-medium">用户名</th>
+            <th class="text-left px-3 py-2 font-medium">角色</th>
+            <th class="text-left px-3 py-2 font-medium">创建时间</th>
+          </tr>
+        </thead>
+        <tbody id="saTenantUsersBody" class="divide-y divide-slate-100"></tbody>
+      </table>
+      <div id="saTenantUsersEmpty" class="hidden px-3 py-6 text-center text-sm text-slate-400">该组织暂无成员</div>
     </div>
   </div>
 </div>

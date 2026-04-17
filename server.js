@@ -44,6 +44,15 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS tenants (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_id TEXT UNIQUE NOT NULL,
+    name TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS super_admins (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    must_change_password INTEGER NOT NULL DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -148,6 +157,34 @@ migrateConfig();
 migrateSchedules();
 migrateLegacyTenants();
 
+function migrateTenantsAddName() {
+  const cols = db.prepare("PRAGMA table_info(tenants)").all();
+  if (!cols.some(c => c.name === 'name')) {
+    db.exec(`ALTER TABLE tenants ADD COLUMN name TEXT;`);
+  }
+  db.prepare("UPDATE tenants SET name = tenant_id WHERE name IS NULL OR name = ''").run();
+}
+migrateTenantsAddName();
+
+function seedSuperAdmin() {
+  const exists = db.prepare("SELECT 1 FROM super_admins LIMIT 1").get();
+  if (!exists) {
+    db.prepare("INSERT INTO super_admins (username, password_hash, must_change_password) VALUES (?, ?, 1)")
+      .run('admin', hashPassword('admin'));
+    console.log('[Seed] Default super admin created: admin / admin');
+  }
+}
+seedSuperAdmin();
+
+function genOrgId() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let id = '';
+  for (let i = 0; i < 8; i++) {
+    id += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return id;
+}
+
 const DEFAULT_CONFIG = {
   groups: [
     { id: 'g1', name: '销售部' },
@@ -251,7 +288,7 @@ function resolveTenant(req, res, next) {
 }
 
 function requireAuth(req, res, next) {
-  if (req.session && req.session.tenantId === req.tenantId) {
+  if (req.session && (req.session.tenantId === req.tenantId || req.session.role === 'superadmin')) {
     return next();
   }
   res.status(401).json({ error: 'Unauthorized' });
@@ -260,6 +297,11 @@ function requireAuth(req, res, next) {
 function requireAdmin(req, res, next) {
   if (req.session && req.session.role === 'admin') return next();
   res.status(403).json({ error: '需要管理员权限' });
+}
+
+function requireSuperAdmin(req, res, next) {
+  if (req.session && req.session.role === 'superadmin') return next();
+  res.status(403).json({ error: '需要超级管理员权限' });
 }
 
 // ── DB helpers ──
@@ -324,21 +366,34 @@ app.get('/api/auth/status', resolveTenant, (req, res) => {
   const hasAdmin = tenant
     ? !!db.prepare("SELECT 1 FROM users WHERE tenant_id = ? AND role = 'admin' LIMIT 1").get(req.tenantId)
     : false;
-  res.json({ tenantId: req.tenantId, hasTenant: !!tenant, hasAdmin });
+  res.json({ tenantId: req.tenantId, tenantName: tenant?.name || req.tenantId, hasTenant: !!tenant, hasAdmin });
 });
 
 app.get('/api/auth/me', resolveTenant, (req, res) => {
+  const isSuperAdmin = !!(req.session && req.session.role === 'superadmin');
   res.json({
     tenantId: req.tenantId,
-    authenticated: !!(req.session && req.session.tenantId === req.tenantId),
+    authenticated: !!(req.session && (req.session.tenantId === req.tenantId || isSuperAdmin)),
     username: req.session?.username || null,
     role: req.session?.role || null,
+    isSuperAdmin,
+    mustChangePassword: req.session?.mustChangePassword || false,
   });
 });
 
 app.post('/api/auth/login', resolveTenant, (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: '用户名和密码必填' });
+
+  // Check super admin first
+  const superAdmin = db.prepare('SELECT * FROM super_admins WHERE username = ?').get(username);
+  if (superAdmin && verifyPassword(password, superAdmin.password_hash)) {
+    req.session.tenantId = '__system';
+    req.session.username = username;
+    req.session.role = 'superadmin';
+    req.session.mustChangePassword = superAdmin.must_change_password === 1;
+    return res.json({ ok: true, tenantId: '__system', username, role: 'superadmin', isSuperAdmin: true, mustChangePassword: req.session.mustChangePassword });
+  }
 
   const user = db.prepare('SELECT * FROM users WHERE tenant_id = ? AND username = ?').get(req.tenantId, username);
   if (!user || !verifyPassword(password, user.password_hash)) {
@@ -348,7 +403,8 @@ app.post('/api/auth/login', resolveTenant, (req, res) => {
   req.session.tenantId = req.tenantId;
   req.session.username = username;
   req.session.role = user.role;
-  res.json({ ok: true, tenantId: req.tenantId, username, role: user.role });
+  req.session.mustChangePassword = false;
+  res.json({ ok: true, tenantId: req.tenantId, username, role: user.role, isSuperAdmin: false, mustChangePassword: false });
 });
 
 app.post('/api/auth/logout', resolveTenant, (req, res) => {
@@ -356,25 +412,30 @@ app.post('/api/auth/logout', resolveTenant, (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/auth/register-admin', resolveTenant, (req, res) => {
-  const { username, password } = req.body || {};
-  if (!username || !password) return res.status(400).json({ error: '用户名和密码必填' });
+app.post('/api/auth/register-admin', (req, res) => {
+  const { orgName, username, password } = req.body || {};
+  if (!orgName || !username || !password) return res.status(400).json({ error: '组织名称、用户名和密码必填' });
 
-  const tenantExists = db.prepare('SELECT * FROM tenants WHERE tenant_id = ?').get(req.tenantId);
-  if (tenantExists) {
-    const hasAdmin = db.prepare("SELECT 1 FROM users WHERE tenant_id = ? AND role = 'admin' LIMIT 1").get(req.tenantId);
-    if (hasAdmin) return res.status(409).json({ error: '该租户已存在管理员' });
-  } else {
-    db.prepare('INSERT INTO tenants (tenant_id) VALUES (?)').run(req.tenantId);
+  let tenantId;
+  for (let i = 0; i < 10; i++) {
+    tenantId = genOrgId();
+    const existing = db.prepare('SELECT 1 FROM tenants WHERE tenant_id = ?').get(tenantId);
+    if (!existing) break;
   }
+  if (!tenantId) return res.status(500).json({ error: '无法生成组织ID，请重试' });
+
+  db.prepare('INSERT INTO tenants (tenant_id, name) VALUES (?, ?)').run(tenantId, orgName);
+  db.prepare("INSERT OR REPLACE INTO config (tenant_id, key, value) VALUES (?, 'app_config', ?)")
+    .run(tenantId, JSON.stringify(DEFAULT_CONFIG));
 
   try {
     db.prepare("INSERT INTO users (tenant_id, username, password_hash, role) VALUES (?, ?, ?, 'admin')")
-      .run(req.tenantId, username, hashPassword(password));
-    req.session.tenantId = req.tenantId;
+      .run(tenantId, username, hashPassword(password));
+    req.session.tenantId = tenantId;
     req.session.username = username;
     req.session.role = 'admin';
-    res.json({ ok: true, tenantId: req.tenantId, username, role: 'admin' });
+    req.session.mustChangePassword = false;
+    res.json({ ok: true, tenantId, tenantName: orgName, username, role: 'admin' });
   } catch (e) {
     if (e.message && e.message.includes('UNIQUE constraint failed')) {
       return res.status(409).json({ error: '用户名已被注册' });
@@ -383,29 +444,30 @@ app.post('/api/auth/register-admin', resolveTenant, (req, res) => {
   }
 });
 
-app.post('/api/auth/register-member', resolveTenant, (req, res) => {
-  const { username, password } = req.body || {};
-  if (!username || !password) return res.status(400).json({ error: '用户名和密码必填' });
+app.post('/api/auth/register-member', (req, res) => {
+  const { tenantId, username, password } = req.body || {};
+  if (!tenantId || !username || !password) return res.status(400).json({ error: '组织ID、用户名和密码必填' });
 
-  const tenant = db.prepare('SELECT * FROM tenants WHERE tenant_id = ?').get(req.tenantId);
-  if (!tenant) return res.status(404).json({ error: '租户不存在' });
+  const tenant = db.prepare('SELECT * FROM tenants WHERE tenant_id = ?').get(tenantId);
+  if (!tenant) return res.status(404).json({ error: '组织不存在' });
 
   try {
     db.prepare("INSERT INTO users (tenant_id, username, password_hash, role) VALUES (?, ?, ?, 'member')")
-      .run(req.tenantId, username, hashPassword(password));
+      .run(tenantId, username, hashPassword(password));
 
-    const cfg = getConfig(req.tenantId);
+    const cfg = getConfig(tenantId);
     const exists = cfg.members.find(m => m.uid === username);
     if (!exists) {
       const gid = cfg.groups[0]?.id || '';
       cfg.members.push({ id: genId('m'), name: username, uid: username, groupId: gid });
-      setConfig(req.tenantId, cfg);
+      setConfig(tenantId, cfg);
     }
 
-    req.session.tenantId = req.tenantId;
+    req.session.tenantId = tenantId;
     req.session.username = username;
     req.session.role = 'member';
-    res.json({ ok: true, tenantId: req.tenantId, username, role: 'member' });
+    req.session.mustChangePassword = false;
+    res.json({ ok: true, tenantId, tenantName: tenant.name || tenantId, username, role: 'member' });
   } catch (e) {
     if (e.message && e.message.includes('UNIQUE constraint failed')) {
       return res.status(409).json({ error: '用户名已被注册' });
@@ -424,6 +486,58 @@ app.post('/api/admin/reset-password', resolveTenant, requireAuth, requireAdmin, 
   db.prepare('UPDATE users SET password_hash = ? WHERE tenant_id = ? AND username = ?')
     .run(hashPassword(newPassword), req.tenantId, username);
   res.json({ ok: true });
+});
+
+// ── Super Admin routes ──
+app.post('/api/superadmin/login', (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: '用户名和密码必填' });
+
+  const superAdmin = db.prepare('SELECT * FROM super_admins WHERE username = ?').get(username);
+  if (!superAdmin || !verifyPassword(password, superAdmin.password_hash)) {
+    return res.status(401).json({ error: '用户名或密码错误' });
+  }
+
+  req.session.tenantId = '__system';
+  req.session.username = username;
+  req.session.role = 'superadmin';
+  req.session.mustChangePassword = superAdmin.must_change_password === 1;
+  res.json({ ok: true, username, role: 'superadmin', mustChangePassword: req.session.mustChangePassword });
+});
+
+app.post('/api/superadmin/logout', (req, res) => {
+  req.session.destroy(() => {});
+  res.json({ ok: true });
+});
+
+app.get('/api/superadmin/me', requireSuperAdmin, (req, res) => {
+  const sa = db.prepare('SELECT username, must_change_password FROM super_admins WHERE username = ?').get(req.session.username);
+  res.json({ username: sa.username, role: 'superadmin', mustChangePassword: sa.must_change_password === 1 });
+});
+
+app.post('/api/superadmin/change-password', requireSuperAdmin, (req, res) => {
+  const { newPassword } = req.body || {};
+  if (!newPassword) return res.status(400).json({ error: '新密码必填' });
+  db.prepare('UPDATE super_admins SET password_hash = ?, must_change_password = 0 WHERE username = ?')
+    .run(hashPassword(newPassword), req.session.username);
+  req.session.mustChangePassword = false;
+  res.json({ ok: true });
+});
+
+app.get('/api/superadmin/tenants', requireSuperAdmin, (req, res) => {
+  const tenants = db.prepare(`
+    SELECT t.tenant_id AS id, t.name, t.created_at,
+      (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.tenant_id) AS userCount
+    FROM tenants t
+    ORDER BY t.created_at DESC
+  `).all();
+  res.json(tenants);
+});
+
+app.get('/api/superadmin/tenants/:tenantId/users', requireSuperAdmin, (req, res) => {
+  const users = db.prepare('SELECT username, role, created_at FROM users WHERE tenant_id = ? ORDER BY created_at DESC')
+    .all(req.params.tenantId);
+  res.json(users);
 });
 
 app.get('/api/config', resolveTenant, requireAuth, (req, res) => {
