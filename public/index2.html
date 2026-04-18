@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>排班大师 v2.0</title>
+<title>排班大师 v2.0 - Excel</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -17,6 +17,10 @@
   /* sticky table */
   .stickyleft { position:sticky; left:0; z-index:10; }
   .stickyleft2 { position:sticky; left:160px; z-index:10; }
+  .selecting-others { background: #f8fafc !important; opacity: 0.5; }
+  .excel-cell { border-right: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; background: #fff; transition: background 0.08s; }
+  .excel-cell:hover { background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%); }
+  .excel-cell.selecting { background: #cbd5e1 !important; box-shadow: inset 0 0 0 1px #64748b; }
   .selecting-others { background: #f1f5f9 !important; opacity: 0.6; }
   @media (max-width:768px) {
     .desktop-only { display:none !important; }
@@ -479,6 +483,6 @@
   </div>
 </div>
 
-<script src="app.js"></script>
+<script src="app2.js"></script>
 </body>
 </html>

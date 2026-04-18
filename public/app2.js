@@ -87,6 +87,7 @@ let _dragging = false;
 let selCells = new Set();
 let isBatchMode = false;
 let _mouseDownTime = 0;
+let _dragStartCell = null;
 
 // Mobile state
 let mobileMemberIndex = 0;
@@ -98,7 +99,7 @@ let mobileIsBatchMode = false;
 
 let configLoaded = false, dataLoaded = false;
 let currentTenantName = '';
-let currentTheme = localStorage.getItem('sched_theme') || 'Class';
+let currentTheme = localStorage.getItem('sched_theme') || 'Excel';
 
 // Auth state
 let authFormMode = 'member';      // 'member' | 'createOrg' | 'superAdmin'
@@ -776,7 +777,8 @@ function renderTable() {
   head.innerHTML = '';
 
   const nameCol = document.createElement('div');
-  nameCol.className = 'w-40 min-w-[160px] shrink-0 bg-white border-r border-slate-200 stickyleft flex items-center gap-2 px-3';
+  nameCol.className = 'w-40 min-w-[160px] shrink-0 bg-white border-r border-b border-slate-300 stickyleft flex items-center gap-2 px-3 excel-cell';
+  nameCol.style.zIndex = '20';
   nameCol.innerHTML = `
     <span class="text-[11px] font-semibold text-slate-400 whitespace-nowrap">成员</span>
     <select id="groupFilterInline" class="flex-1 text-xs border border-slate-200 rounded-md bg-slate-50 px-2 py-1 outline-none focus:border-indigo-500">
@@ -786,7 +788,8 @@ function renderTable() {
   head.appendChild(nameCol);
 
   const teamCol = document.createElement('div');
-  teamCol.className = 'w-20 min-w-[80px] shrink-0 flex items-center justify-center text-[11px] font-semibold text-slate-400 border-r border-slate-200 bg-white stickyleft2';
+  teamCol.className = 'w-20 min-w-[80px] shrink-0 flex items-center justify-center text-[11px] font-semibold text-slate-500 border-r border-b border-slate-300 bg-white stickyleft2 excel-cell';
+  teamCol.style.zIndex = '20';
   teamCol.textContent = '团队';
   head.appendChild(teamCol);
 
@@ -794,14 +797,14 @@ function renderTable() {
     const div = document.createElement('div');
     const we = isWeekend(year, month, d);
     const td = isToday(year, month, d);
-    div.className = `w-11 min-w-[44px] shrink-0 text-center py-1.5 border-r border-slate-300 ${we?'bg-red-50':''} ${td?'bg-indigo-50':''}`;
+    div.className = `w-11 min-w-[44px] text-center py-1.5 border-r border-b border-slate-300 excel-cell ${we?'bg-red-50':''} ${td?'bg-indigo-50':''}`;
     div.innerHTML = `<div class="text-xs font-semibold font-mono ${we?'text-red-500':'text-slate-700'} ${td?'text-indigo-600':''}">${d}</div>
                      <div class="text-[10px] text-slate-400">${weekdayStr(year,month,d)}</div>`;
     head.appendChild(div);
   }
 
   const statCol = document.createElement('div');
-  statCol.className = 'w-20 min-w-[80px] shrink-0 flex flex-col items-center justify-center text-[10px] font-semibold text-slate-400 border-l-2 border-slate-300 bg-slate-50 gap-0.5';
+  statCol.className = 'w-20 min-w-[80px] shrink-0 flex flex-col items-center justify-center text-[10px] font-semibold text-slate-500 border-l border-b border-slate-300 bg-slate-50 gap-0.5 excel-cell';
   statCol.innerHTML = `<span>统计</span><a href="#" id="desktopExportLink" class="text-blue-600 hover:underline font-normal text-[10px]">导出</a>`;
   head.appendChild(statCol);
   document.getElementById('desktopExportLink')?.addEventListener('click', (e) => { e.preventDefault(); exportExcel(); });
@@ -813,10 +816,11 @@ function renderTable() {
     const mIdx = CONFIG.members.indexOf(m);
     const group = CONFIG.groups.find(g => g.id === m.groupId);
     const row = document.createElement('div');
-    row.className = 'flex items-stretch border-b border-slate-200 hover:bg-slate-50/60' + (m.uid === currentUsername ? ' bg-blue-50' : '');
+    row.className = 'flex items-stretch' + (m.uid === currentUsername ? ' bg-blue-50/40' : '');
 
     const nc = document.createElement('div');
-    nc.className = 'w-40 min-w-[160px] shrink-0 px-3 flex items-center gap-2 bg-white border-r border-slate-200 stickyleft hover:bg-slate-50/60 cursor-pointer';
+    nc.className = 'w-40 min-w-[160px] shrink-0 px-3 flex items-center gap-2 bg-white border-r border-b border-slate-300 stickyleft hover:bg-slate-50 cursor-pointer excel-cell';
+    nc.style.zIndex = '10';
     nc.innerHTML = `
       <div class="w-7 h-7 rounded-full text-white flex items-center justify-center text-xs font-semibold shrink-0" style="background:${memberColor(mIdx)}">${m.name[0]}</div>
       <div class="min-w-0"><div class="text-sm font-medium text-slate-700 truncate">${m.name}</div><div class="text-[10px] text-slate-400 truncate">${m.uid||'—'}</div></div>`;
@@ -824,7 +828,8 @@ function renderTable() {
     row.appendChild(nc);
 
     const tc = document.createElement('div');
-    tc.className = 'w-20 min-w-[80px] shrink-0 flex items-center justify-center bg-white border-r border-slate-200 stickyleft2 hover:bg-slate-50/60 text-[11px] text-slate-400 text-center px-1 leading-tight';
+    tc.className = 'w-20 min-w-[80px] shrink-0 flex items-center justify-center bg-white border-r border-b border-slate-300 stickyleft2 hover:bg-slate-50 text-[11px] text-slate-500 text-center px-1 leading-tight excel-cell';
+    tc.style.zIndex = '10';
     tc.textContent = group?.name || '—';
     row.appendChild(tc);
 
@@ -836,19 +841,20 @@ function renderTable() {
       const td = isToday(year, month, d);
 
       const cell = document.createElement('div');
-      cell.className = `w-11 min-w-[44px] h-12 shrink-0 border-r border-slate-200 flex items-center justify-center cursor-pointer relative select-none transition-colors ${we?'bg-red-50':''} ${td?'bg-indigo-50':''}`;
+      cell.className = `w-11 min-w-[44px] h-12 shrink-0 flex items-center justify-center cursor-pointer relative select-none excel-cell ${we?'bg-red-50':''} ${td?'bg-indigo-50':''}`;
       cell.dataset.key = key;
       cell.dataset.mid = m.id;
       cell.dataset.day = d;
+      cell.dataset.row = rowIdx;
+      cell.dataset.col = d - 1;
 
-      const inner = document.createElement('div');
-      inner.className = 'w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-semibold transition-transform';
       if (st) {
-        inner.textContent = st.short;
-        inner.style.background = st.color;
-        inner.style.color = 'white';
+        cell.textContent = st.short;
+        cell.style.backgroundColor = st.color + '18';
+        cell.style.color = st.color;
+        cell.style.fontWeight = '600';
+        cell.style.fontSize = '11px';
       }
-      cell.appendChild(inner);
 
       cell.addEventListener('mousedown', e => { if(e.button===0) onCellDown(e, cell); });
       cell.addEventListener('mouseenter', () => onCellEnter(cell));
@@ -859,7 +865,7 @@ function renderTable() {
     }
 
     const sc = document.createElement('div');
-    sc.className = 'w-20 min-w-[80px] shrink-0 flex items-center justify-center px-1 border-l-2 border-slate-200 bg-slate-50 gap-1 flex-wrap';
+    sc.className = 'w-20 min-w-[80px] shrink-0 flex items-center justify-center px-1 border-l border-b border-slate-300 bg-slate-50 gap-1 flex-wrap excel-cell';
     sc.id = `stat-${m.id}`;
     row.appendChild(sc);
 
@@ -893,6 +899,7 @@ function onCellDown(e, cell) {
   _mousedown = true;
   _dragging = false;
   _mouseDownTime = Date.now();
+  _dragStartCell = cell;
   if (!cell.classList.contains('selecting')) clearSelection();
   e.preventDefault();
 }
@@ -900,7 +907,30 @@ function onCellDown(e, cell) {
 function onCellEnter(cell) {
   if (!_mousedown || isBatchMode) return;
   if (!_dragging) _dragging = true;
-  addToSelection(cell);
+  updateRectSelection(cell);
+}
+
+function updateRectSelection(endCell) {
+  if (!_dragStartCell || !endCell) return;
+  clearSelection();
+
+  const startRow = +_dragStartCell.dataset.row;
+  const startCol = +_dragStartCell.dataset.col;
+  const endRow = +endCell.dataset.row;
+  const endCol = +endCell.dataset.col;
+
+  const minRow = Math.min(startRow, endRow);
+  const maxRow = Math.max(startRow, endRow);
+  const minCol = Math.min(startCol, endCol);
+  const maxCol = Math.max(startCol, endCol);
+
+  document.querySelectorAll('[data-row][data-col]').forEach(cell => {
+    const r = +cell.dataset.row;
+    const c = +cell.dataset.col;
+    if (r >= minRow && r <= maxRow && c >= minCol && c <= maxCol) {
+      addToSelection(cell);
+    }
+  });
 }
 
 function onCellClick(e, cell) {
@@ -941,8 +971,6 @@ function addToSelection(cell) {
   }
   selCells.add(key);
   cell.classList.add('selecting');
-  const inner = cell.querySelector('.cell-inner, div');
-  if(inner) inner.classList.add('ring-2','ring-indigo-500','scale-110');
 }
 
 function clearSelection() {
@@ -950,8 +978,6 @@ function clearSelection() {
     const el = document.querySelector(`[data-key="${key}"]`);
     if (el) {
       el.classList.remove('selecting');
-      const inner = el.querySelector('div');
-      if(inner) inner.classList.remove('ring-2','ring-indigo-500','scale-110');
     }
   });
   document.querySelectorAll('.selecting-others').forEach(el => el.classList.remove('selecting-others'));
@@ -1066,16 +1092,19 @@ function getCycle() {
 function applyCellStatus(cell, statusId) {
   const key = cell.dataset.key;
   const mid = cell.dataset.mid;
-  const inner = cell.querySelector('div');
-  inner.textContent = '';
-  inner.style.background = '';
-  inner.style.color = '';
+  cell.textContent = '';
+  cell.style.backgroundColor = '';
+  cell.style.color = '';
+  cell.style.fontWeight = '';
+  cell.style.fontSize = '';
   if (statusId) {
     const st = getStatus(statusId);
     if (st) {
-      inner.textContent = st.short;
-      inner.style.background = st.color;
-      inner.style.color = 'white';
+      cell.textContent = st.short;
+      cell.style.backgroundColor = st.color + '18';
+      cell.style.color = st.color;
+      cell.style.fontWeight = '600';
+      cell.style.fontSize = '11px';
       scheduleData[key] = statusId;
     }
   } else {
@@ -1326,8 +1355,6 @@ function addToMobileSelection(cell) {
   }
   selCells.add(key);
   cell.classList.add('selecting');
-  const badge = cell.querySelector('div:last-child');
-  if(badge) badge.classList.add('ring-2','ring-indigo-500');
 }
 
 function clearMobileSelection() {
@@ -1335,8 +1362,6 @@ function clearMobileSelection() {
     const el = document.querySelector(`[data-key="${key}"]`);
     if (el) {
       el.classList.remove('selecting');
-      const badge = el.querySelector('div:last-child');
-      if(badge) badge.classList.remove('ring-2','ring-indigo-500');
     }
   });
   document.querySelectorAll('.selecting-others').forEach(el => el.classList.remove('selecting-others'));
@@ -2266,7 +2291,7 @@ async function confirmSaPwdChange() {
 // ═══════════════════════════════════════════════
 (async function init() {
   // Theme redirect check
-  const savedTheme = localStorage.getItem('sched_theme') || 'Class';
+  const savedTheme = localStorage.getItem('sched_theme') || 'Excel';
   const isIndex2 = window.location.pathname.includes('index2');
   if (savedTheme === 'Excel' && !isIndex2) {
     window.location.href = 'index2.html';

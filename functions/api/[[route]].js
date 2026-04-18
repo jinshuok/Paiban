@@ -419,7 +419,7 @@ export async function onRequest(context) {
   if (pathname === '/api/auth/profile' && method === 'POST') {
     if (!session || session.role === 'superadmin') return json({ error: 'Unauthorized' }, 401)
     const body = await request.json().catch(() => ({}))
-    const { name, uid, thirdParties } = body
+    const { name, uid, thirdParties, newPassword } = body
     if (!name || !uid) return json({ error: '姓名和手机号必填' }, 400)
 
     const currentUid = session.username
@@ -434,11 +434,54 @@ export async function onRequest(context) {
         .bind(uid, tenantId, currentUid).run()
     }
 
+    // Allow changing own password
+    if (newPassword) {
+      await db.prepare('UPDATE users SET password_hash = ? WHERE tenant_id = ? AND username = ?')
+        .bind(hashPassword(newPassword), tenantId, uid).run()
+    }
+
     const cfgRow = await db.prepare('SELECT value FROM tenant_configs WHERE tenant_id = ?').bind(tenantId).first()
     const cfg = cfgRow ? JSON.parse(cfgRow.value) : JSON.parse(JSON.stringify(DEFAULT_CONFIG))
     sanitizeConfig(cfg)
     const member = cfg.members.find(m => m.uid === currentUid)
     if (!member) return json({ error: '成员不存在' }, 404)
+    member.name = name
+    member.uid = uid
+    member.thirdParties = Array.isArray(thirdParties) ? thirdParties : []
+    await db.prepare('INSERT OR REPLACE INTO tenant_configs (tenant_id, value) VALUES (?, ?)')
+      .bind(tenantId, JSON.stringify(cfg)).run()
+
+    return json({ ok: true, username: uid, memberId: member.id })
+  }
+
+  if (pathname === '/api/admin/member-profile' && method === 'POST') {
+    if (!session || session.role !== 'admin') return json({ error: '需要管理员权限' }, 403)
+    const body = await request.json().catch(() => ({}))
+    const { memberId, name, uid, thirdParties, newPassword } = body
+    if (!memberId || !name || !uid) return json({ error: '成员ID、姓名和手机号必填' }, 400)
+
+    const tenantId = session.tenant_id
+    const cfgRow = await db.prepare('SELECT value FROM tenant_configs WHERE tenant_id = ?').bind(tenantId).first()
+    const cfg = cfgRow ? JSON.parse(cfgRow.value) : JSON.parse(JSON.stringify(DEFAULT_CONFIG))
+    sanitizeConfig(cfg)
+    const member = cfg.members.find(m => m.id === memberId)
+    if (!member) return json({ error: '成员不存在' }, 404)
+
+    const oldUid = member.uid
+    if (uid !== oldUid) {
+      const existing = await db.prepare('SELECT 1 FROM users WHERE tenant_id = ? AND username = ?').bind(tenantId, uid).first()
+      if (existing) return json({ error: '该手机号已被使用' }, 409)
+      await db.prepare('UPDATE users SET username = ? WHERE tenant_id = ? AND username = ?')
+        .bind(uid, tenantId, oldUid).run()
+      await db.prepare('UPDATE sessions SET username = ? WHERE tenant_id = ? AND username = ?')
+        .bind(uid, tenantId, oldUid).run()
+    }
+
+    if (newPassword) {
+      await db.prepare('UPDATE users SET password_hash = ? WHERE tenant_id = ? AND username = ?')
+        .bind(hashPassword(newPassword), tenantId, uid).run()
+    }
+
     member.name = name
     member.uid = uid
     member.thirdParties = Array.isArray(thirdParties) ? thirdParties : []
